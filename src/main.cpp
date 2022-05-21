@@ -1,3 +1,6 @@
+/*************************************************************************************************/
+// Preprocessor definitions
+/*************************************************************************************************/
 #define _CRT_SECURE_NO_WARNINGS
 #define _CRT_SECURE_NO_DEPRECATE
 #include <time.h> // time
@@ -8,19 +11,27 @@ using namespace cute;
 #include <sokol/sokol_gfx_imgui.h>
 #include <imgui/imgui.h>
 
-void mount_content_folder()
-{
-	char buf[1024];
-	const char* base = file_system_get_base_dir();
-	path_pop(base, buf, NULL);
-#ifdef _MSC_VER
-	path_pop(buf, buf, NULL); // Pop out of Release/Debug folder when using MSVC.
-#endif
-	strcat(buf, "/assets");
-	file_system_mount(buf, "");
-}
+/*************************************************************************************************/
+// Function definitions
+/*************************************************************************************************/
+void mount_content_folder();
+uint64_t unix_timestamp();
+error_t make_test_connect_token(uint64_t unique_client_id, const char* address_and_port, uint8_t* connect_token_buffer);
+void client_update_code(float dt);
+void server_update_code(float dt);
+void main_loop();
+void server_init_code();
+void client_init_code();
 
+/*************************************************************************************************/
+// Global data
+/*************************************************************************************************/
 uint16_t port = 5001;
+batch_t* batch_p;
+sprite_t letterA;
+uint64_t appID = 234;
+server_t* server;
+client_t* client_p;
 
 // Embedded g_public_key
 int g_public_key_sz = 32;
@@ -37,20 +48,9 @@ unsigned char g_secret_key_data[64] = {
 	0x19,0x3e,0xa4,0xed,0xbc,0x0f,0x87,0x98,0x80,0xac,0x89,0x82,0x30,0xe9,0x95,0x6c
 };
 
-batch_t* batch_p;
-sprite_t letterA;
-uint64_t appID = 234;
-server_t* server;
-client_t* client_p;
-
-uint64_t unix_timestamp()
-{
-	time_t ltime;
-	time(&ltime);
-	struct tm* timeinfo = gmtime(&ltime);;
-	return (uint64_t)mktime(timeinfo);
-}
-
+/*************************************************************************************************/
+// 
+/*************************************************************************************************/
 error_t make_test_connect_token(uint64_t unique_client_id, const char* address_and_port, uint8_t* connect_token_buffer)
 {
 	crypto_key_t client_to_server_key = crypto_generate_key();
@@ -83,6 +83,9 @@ error_t make_test_connect_token(uint64_t unique_client_id, const char* address_a
 	return err;
 }
 
+/*************************************************************************************************/
+// 
+/*************************************************************************************************/
 void client_update_code(float dt)
 {
 	letterA.draw(batch_p);
@@ -118,6 +121,9 @@ void client_update_code(float dt)
 	}
 }
 
+/*************************************************************************************************/
+// 
+/*************************************************************************************************/
 void server_update_code(float dt)
 {
 	uint64_t unix_time = unix_timestamp();
@@ -139,6 +145,9 @@ void server_update_code(float dt)
 	}
 }
 
+/*************************************************************************************************/
+// 
+/*************************************************************************************************/
 void main_loop()
 {
 	while (app_is_running())
@@ -160,12 +169,44 @@ void main_loop()
 	
 }
 
+/*************************************************************************************************/
+// 
+/*************************************************************************************************/
 void panic(error_t err)
 {
 	printf("ERROR: %s\n", err.details);
 	exit(-1);
 }
 
+/*************************************************************************************************/
+// 
+/*************************************************************************************************/
+uint64_t unix_timestamp()
+{
+	time_t ltime;
+	time(&ltime);
+	struct tm* timeinfo = gmtime(&ltime);;
+	return (uint64_t)mktime(timeinfo);
+}
+
+/*************************************************************************************************/
+// 
+/*************************************************************************************************/
+void mount_content_folder()
+{
+	char buf[1024];
+	const char* base = file_system_get_base_dir();
+	path_pop(base, buf, NULL);
+#ifdef _MSC_VER
+	path_pop(buf, buf, NULL); // Pop out of Release/Debug folder when using MSVC.
+#endif
+	strcat(buf, "/assets");
+	file_system_mount(buf, "");
+}
+
+/*************************************************************************************************/
+// 
+/*************************************************************************************************/
 void client_init_code()
 {
 	printf("Setting up Client");
@@ -185,6 +226,9 @@ void client_init_code()
 	if (err.is_error()) panic(err);
 }
 
+/*************************************************************************************************/
+// 
+/*************************************************************************************************/
 void server_init_code()
 {
 	printf("Setting up Server");
@@ -202,6 +246,9 @@ void server_init_code()
 	if (err.is_error()) panic(err);
 }
 
+/*************************************************************************************************/
+// 
+/*************************************************************************************************/
 int main(int argc, const char** argv)
 {
 	uint32_t app_options = CUTE_APP_OPTIONS_DEFAULT_GFX_CONTEXT | CUTE_APP_OPTIONS_WINDOW_POS_CENTERED;
