@@ -22,7 +22,6 @@ void mount_content_folder()
 
 uint16_t port = 5001;
 
-
 // Embedded g_public_key
 int g_public_key_sz = 32;
 unsigned char g_public_key_data[32] = {
@@ -84,6 +83,62 @@ error_t make_test_connect_token(uint64_t unique_client_id, const char* address_a
 	return err;
 }
 
+void client_update_code(float dt)
+{
+	letterA.draw(batch_p);
+	batch_flush(batch_p);
+
+	uint64_t unix_time = unix_timestamp();
+
+	client_update(client_p, dt, unix_time);
+
+	if (client_state_get(client_p) == CLIENT_STATE_CONNECTED) {
+		static bool notify = false;
+		if (!notify) {
+			notify = true;
+			printf("Connected! Press ESC to gracefully disconnect.\n");
+		}
+
+		static float t = 0;
+		t += dt;
+		if (t > 2) {
+			const char* data = "What's up over there, Mr. Server?";
+			int size = (int)strlen(data) + 1;
+			client_send(client_p, data, size, false);
+			t = 0;
+		}
+
+		if (key_was_pressed(KEY_ESCAPE)) {
+			client_disconnect(client_p);
+			app_stop_running();
+		}
+	} else if (client_state_get(client_p) < 0) {
+		printf("Client encountered an error: %s.\n", client_state_string(client_state_get(client_p)));
+		exit(-1);
+	}
+}
+
+void server_update_code(float dt)
+{
+	uint64_t unix_time = unix_timestamp();
+
+	server_update(server, dt, unix_time);
+
+	server_event_t e;
+	while (server_pop_event(server, &e)) {
+		if (e.type == SERVER_EVENT_TYPE_NEW_CONNECTION) {
+			printf("New connection from id %d, on index %d.\n", (int)e.u.new_connection.client_id, e.u.new_connection.client_index);
+		}
+		else if (e.type == SERVER_EVENT_TYPE_PAYLOAD_PACKET) {
+			printf("Got a message from client on index %d, \"%s\"\n", e.u.payload_packet.client_index, (const char*)e.u.payload_packet.data);
+			server_free_packet(server, e.u.payload_packet.client_index, e.u.payload_packet.data);
+		}
+		else if (e.type == SERVER_EVENT_TYPE_DISCONNECTED) {
+			printf("Client disconnected on index %d.\n", e.u.disconnected.client_index);
+		}
+	}
+}
+
 void main_loop()
 {
 	while (app_is_running())
@@ -91,65 +146,14 @@ void main_loop()
 		float dt = calc_dt();
 		app_update(dt);
 
-		// if (key_was_pressed(KEY_Q))
-		// {
-		// 	app_stop_running();
-		// }
-
 #ifdef CLIENT
-		letterA.draw(batch_p);
-		batch_flush(batch_p);
-
-		uint64_t unix_time = unix_timestamp();
-
-		client_update(client_p, dt, unix_time);
-
-		if (client_state_get(client_p) == CLIENT_STATE_CONNECTED) {
-			static bool notify = false;
-			if (!notify) {
-				notify = true;
-				printf("Connected! Press ESC to gracefully disconnect.\n");
-			}
-
-			static float t = 0;
-			t += dt;
-			if (t > 2) {
-				const char* data = "What's up over there, Mr. Server?";
-				int size = (int)strlen(data) + 1;
-				client_send(client_p, data, size, false);
-				t = 0;
-			}
-
-			if (key_was_pressed(KEY_ESCAPE)) {
-				client_disconnect(client_p);
-				app_stop_running();
-			}
-		} else if (client_state_get(client_p) < 0) {
-			printf("Client encountered an error: %s.\n", client_state_string(client_state_get(client_p)));
-			exit(-1);
-		}
+		client_update_code(dt);
 #endif
 
 		app_present();
 
 #ifdef SERVER
-		uint64_t unix_time = unix_timestamp();
-
-		server_update(server, dt, unix_time);
-
-		server_event_t e;
-		while (server_pop_event(server, &e)) {
-			if (e.type == SERVER_EVENT_TYPE_NEW_CONNECTION) {
-				printf("New connection from id %d, on index %d.\n", (int)e.u.new_connection.client_id, e.u.new_connection.client_index);
-			}
-			else if (e.type == SERVER_EVENT_TYPE_PAYLOAD_PACKET) {
-				printf("Got a message from client on index %d, \"%s\"\n", e.u.payload_packet.client_index, (const char*)e.u.payload_packet.data);
-				server_free_packet(server, e.u.payload_packet.client_index, e.u.payload_packet.data);
-			}
-			else if (e.type == SERVER_EVENT_TYPE_DISCONNECTED) {
-				printf("Client disconnected on index %d.\n", e.u.disconnected.client_index);
-			}
-		}
+		server_update_code(dt);
 #endif
 
 	}
@@ -162,32 +166,8 @@ void panic(error_t err)
 	exit(-1);
 }
 
-int main(int argc, const char** argv)
+void client_init_code()
 {
-	uint32_t app_options = CUTE_APP_OPTIONS_DEFAULT_GFX_CONTEXT | CUTE_APP_OPTIONS_WINDOW_POS_CENTERED;
-	app_make("Steal Words Multiplayer", 0, 0, 1024, 768, app_options, argv[0]);
-	batch_p = sprite_get_batch();
-	batch_set_projection(batch_p, matrix_ortho_2d(1024, 768, 0, 0));
-	mount_content_folder();
-
-#ifdef SERVER
-	printf("Setting up Server");
-	const char* address_and_port = "127.0.0.1:5001";
-	endpoint_t endpoint;
-	endpoint_init(&endpoint, address_and_port);
-
-	server_config_t server_config = server_config_defaults();
-	server_config.application_id = appID;
-	memcpy(server_config.public_key.key, g_public_key_data, sizeof(g_public_key_data));
-	memcpy(server_config.secret_key.key, g_secret_key_data, sizeof(g_secret_key_data));
-
-	server = server_create(server_config);
-	error_t err = server_start(server, address_and_port);
-	if (err.is_error()) panic(err);
-
-#endif
-
-#ifdef CLIENT
 	printf("Setting up Client");
 	client_p = client_create(0, appID);
 	
@@ -203,7 +183,39 @@ int main(int argc, const char** argv)
 	if (err.is_error()) panic(err);
 	err = client_connect(client_p, connect_token);
 	if (err.is_error()) panic(err);
+}
 
+void server_init_code()
+{
+	printf("Setting up Server");
+	const char* address_and_port = "127.0.0.1:5001";
+	endpoint_t endpoint;
+	endpoint_init(&endpoint, address_and_port);
+
+	server_config_t server_config = server_config_defaults();
+	server_config.application_id = appID;
+	memcpy(server_config.public_key.key, g_public_key_data, sizeof(g_public_key_data));
+	memcpy(server_config.secret_key.key, g_secret_key_data, sizeof(g_secret_key_data));
+
+	server = server_create(server_config);
+	error_t err = server_start(server, address_and_port);
+	if (err.is_error()) panic(err);
+}
+
+int main(int argc, const char** argv)
+{
+	uint32_t app_options = CUTE_APP_OPTIONS_DEFAULT_GFX_CONTEXT | CUTE_APP_OPTIONS_WINDOW_POS_CENTERED;
+	app_make("Steal Words Multiplayer", 0, 0, 1024, 768, app_options, argv[0]);
+	batch_p = sprite_get_batch();
+	batch_set_projection(batch_p, matrix_ortho_2d(1024, 768, 0, 0));
+	mount_content_folder();
+
+#ifdef SERVER
+	server_init_code();
+#endif
+
+#ifdef CLIENT
+	client_init_code();
 #endif
 
 	app_init_imgui();

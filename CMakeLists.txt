@@ -24,12 +24,10 @@ FetchContent_MakeAvailable(cute)
 
 add_executable(StealWordsMPserver
 	src/main.cpp
-	src/server.cpp
 )
 
 add_executable(StealWordsMPclient
 	src/main.cpp
-	src/client.cpp
 )
 
 target_include_directories(StealWordsMPserver PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>)
