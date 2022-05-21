@@ -2,15 +2,8 @@ cmake_minimum_required(VERSION 3.23.1)
 
 project(StealWordsMP)
 
-# cmake_minimum_required(VERSION 3.0)
-# project(cute_snake)
-
 # Must have at least C++14.
 set(CMAKE_CXX_STANDARD 14)
-
-# if(CMAKE_SYSTEM_NAME MATCHES "Emscripten")
-# 	set(EMSCRIPTEN TRUE)
-# endif()
 
 # Make sure all binaries are placed into the same build folder.
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
@@ -29,31 +22,32 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(cute)
 
-add_executable(StealWordsMP
-    src/main.cpp
+add_executable(StealWordsMPserver
+	src/main.cpp
+	src/server.cpp
 )
 
-# # Add source for the game.
-# add_executable(
-# 	snake
-# 	src/main.cpp
-# 	src/shaders/light_shader.h
-# )
+add_executable(StealWordsMPclient
+	src/main.cpp
+	src/client.cpp
+)
 
-target_include_directories(StealWordsMP PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>)
+target_include_directories(StealWordsMPserver PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>)
+target_include_directories(StealWordsMPclient PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>)
 
-# if(EMSCRIPTEN)
-# 	set(CMAKE_EXECUTABLE_SUFFIX ".html")
-# 	target_compile_options(snake PUBLIC -O1 -fno-rtti -fno-exceptions)
-# 	target_link_options(snake PRIVATE -o snake.html --preload-file ${CMAKE_SOURCE_DIR}/content@/content --emrun -s ASYNCIFY=1 -O1)
-# endif()
+target_compile_definitions(StealWordsMPserver PUBLIC SERVER)
+target_compile_definitions(StealWordsMPclient PUBLIC CLIENT)
 
 # Make the game link against Cute Framework.
-target_link_libraries(StealWordsMP cute)
+target_link_libraries(StealWordsMPserver cute)
+target_link_libraries(StealWordsMPclient cute)
 
 # For convenience set MSVC debugger's working directory in the build folder.
 # Also ask MSVC to make snake the startup project.
 if (MSVC)
-	set_property(TARGET StealWordsMP PROPERTY VS_DEBUGGER_WORKING_DIRECTORY $<TARGET_FILE_DIR:StealWordsMP>)
-	set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT StealWordsMP)
+	set_property(TARGET StealWordsMPserver PROPERTY VS_DEBUGGER_WORKING_DIRECTORY $<TARGET_FILE_DIR:StealWordsMPserver>)
+	set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT StealWordsMPserver)
+
+	set_property(TARGET StealWordsMPclient PROPERTY VS_DEBUGGER_WORKING_DIRECTORY $<TARGET_FILE_DIR:StealWordsMPclient>)
+	set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT StealWordsMPclient)
 endif()

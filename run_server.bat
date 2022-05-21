@@ -1,1 +1,1 @@
-build_server\Debug\StealWordsMP.exe
+build\Debug\StealWordsMPserver.exe
