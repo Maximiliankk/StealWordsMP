@@ -34,6 +34,8 @@ uint64_t appID = 234;
 batch_t* batch_p;
 sprite_t letter_sprites[26];
 
+rnd_t rnd;
+
 //#define CLIENT
 //#define SERVER
 
@@ -238,7 +240,9 @@ void client_init_code()
 	client_p = client_create(0, appID);
 	
 	// Must be unique for each different player in your game.
-	uint64_t client_id = 5;
+	rnd_t rnd = rnd_seed((uint64_t)time(0));
+	uint64_t client_id = (uint64_t)rnd_next_range(rnd, 0, 9999999);
+	printf("my client ID is: %d", (int)client_id);
 
 	const char* server_address_and_port = "127.0.0.1:5001";
 	endpoint_t endpoint;
@@ -284,6 +288,7 @@ int main(int argc, const char** argv)
 
 	app_init_imgui();
 
+	// load sprites
 	{
 	letter_sprites[0 ] = sprite_make("letter_a.ase");
 	letter_sprites[1 ] = sprite_make("letter_b.ase");
