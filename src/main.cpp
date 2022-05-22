@@ -292,32 +292,32 @@ int main(int argc, const char** argv)
 
 	// load sprites
 	{
-	letter_sprites[0 ] = sprite_make("letter_a.ase");
-	letter_sprites[1 ] = sprite_make("letter_b.ase");
-	letter_sprites[2 ] = sprite_make("letter_c.ase");
-	letter_sprites[3 ] = sprite_make("letter_d.ase");
-	letter_sprites[4 ] = sprite_make("letter_e.ase");
-	letter_sprites[5 ] = sprite_make("letter_f.ase");
-	letter_sprites[6 ] = sprite_make("letter_g.ase");
-	letter_sprites[7 ] = sprite_make("letter_h.ase");
-	letter_sprites[8 ] = sprite_make("letter_i.ase");
-	letter_sprites[9 ] = sprite_make("letter_j.ase");
-	letter_sprites[10] = sprite_make("letter_k.ase");
-	letter_sprites[11] = sprite_make("letter_l.ase");
-	letter_sprites[12] = sprite_make("letter_m.ase");
-	letter_sprites[13] = sprite_make("letter_n.ase");
-	letter_sprites[14] = sprite_make("letter_o.ase");
-	letter_sprites[15] = sprite_make("letter_p.ase");
-	letter_sprites[16] = sprite_make("letter_q.ase");
-	letter_sprites[17] = sprite_make("letter_r.ase");
-	letter_sprites[18] = sprite_make("letter_s.ase");
-	letter_sprites[19] = sprite_make("letter_t.ase");
-	letter_sprites[20] = sprite_make("letter_u.ase");
-	letter_sprites[21] = sprite_make("letter_v.ase");
-	letter_sprites[22] = sprite_make("letter_w.ase");
-	letter_sprites[23] = sprite_make("letter_x.ase");
-	letter_sprites[24] = sprite_make("letter_y.ase");
-	letter_sprites[25] = sprite_make("letter_z.ase");
+	letter_sprites[0 ] = sprite_make("art/letter_a.ase");
+	letter_sprites[1 ] = sprite_make("art/letter_b.ase");
+	letter_sprites[2 ] = sprite_make("art/letter_c.ase");
+	letter_sprites[3 ] = sprite_make("art/letter_d.ase");
+	letter_sprites[4 ] = sprite_make("art/letter_e.ase");
+	letter_sprites[5 ] = sprite_make("art/letter_f.ase");
+	letter_sprites[6 ] = sprite_make("art/letter_g.ase");
+	letter_sprites[7 ] = sprite_make("art/letter_h.ase");
+	letter_sprites[8 ] = sprite_make("art/letter_i.ase");
+	letter_sprites[9 ] = sprite_make("art/letter_j.ase");
+	letter_sprites[10] = sprite_make("art/letter_k.ase");
+	letter_sprites[11] = sprite_make("art/letter_l.ase");
+	letter_sprites[12] = sprite_make("art/letter_m.ase");
+	letter_sprites[13] = sprite_make("art/letter_n.ase");
+	letter_sprites[14] = sprite_make("art/letter_o.ase");
+	letter_sprites[15] = sprite_make("art/letter_p.ase");
+	letter_sprites[16] = sprite_make("art/letter_q.ase");
+	letter_sprites[17] = sprite_make("art/letter_r.ase");
+	letter_sprites[18] = sprite_make("art/letter_s.ase");
+	letter_sprites[19] = sprite_make("art/letter_t.ase");
+	letter_sprites[20] = sprite_make("art/letter_u.ase");
+	letter_sprites[21] = sprite_make("art/letter_v.ase");
+	letter_sprites[22] = sprite_make("art/letter_w.ase");
+	letter_sprites[23] = sprite_make("art/letter_x.ase");
+	letter_sprites[24] = sprite_make("art/letter_y.ase");
+	letter_sprites[25] = sprite_make("art/letter_z.ase");
 	}
 
 	main_loop();
