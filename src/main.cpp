@@ -3,7 +3,7 @@
 /*************************************************************************************************/
 #define _CRT_SECURE_NO_WARNINGS
 #define _CRT_SECURE_NO_DEPRECATE
-#include <time.h> // time
+#include <time.h>
 #include <cute.h>
 using namespace cute;
 #define CUTE_PATH_IMPLEMENTATION
@@ -29,11 +29,24 @@ int main(int argc, const char** argv);
 // Global data
 /*************************************************************************************************/
 uint16_t port = 5001;
+uint64_t appID = 234;
+
 batch_t* batch_p;
 sprite_t letterA;
-uint64_t appID = 234;
-server_t* server;
+
+//#define CLIENT
+//#define SERVER
+
+//#ifdef CLIENT
 client_t* client_p;
+uint32_t client_id;
+const int letterBufSize = 20;
+char letterBuf[letterBufSize+1];
+//#endif
+
+//#ifdef SERVER
+server_t* server;
+//#endif
 
 // Embedded g_public_key
 int g_public_key_sz = 32;
@@ -84,6 +97,21 @@ error_t make_test_connect_token(uint64_t unique_client_id, const char* address_a
 
 	return err;
 }
+void client_check_input()
+{
+	for(int i='a';i<='z';++i)
+	{
+		if (key_was_pressed(key_button_t(i))) {
+			if(strlen(letterBuf) < letterBufSize)
+			{
+				char letter[2];
+				letter[0] = i;
+				letter[1] = '\0';
+				strcat(letterBuf, letter);
+			}
+		}	
+	}
+}
 void client_update_code(float dt)
 {
 	letterA.draw(batch_p);
@@ -92,6 +120,8 @@ void client_update_code(float dt)
 	uint64_t unix_time = unix_timestamp();
 
 	client_update(client_p, dt, unix_time);
+
+	client_check_input();
 
 	if (client_state_get(client_p) == CLIENT_STATE_CONNECTED) {
 		static bool notify = false;
@@ -109,6 +139,13 @@ void client_update_code(float dt)
 			t = 0;
 		}
 
+		if (key_was_pressed(KEY_RETURN)) {
+			char data[50];
+			strcpy(data,"kp:enter:");
+			strcat(data, letterBuf);
+			int size = (int)strlen(data) + 1;
+			client_send(client_p, data, size, false);
+		}
 		if (key_was_pressed(KEY_ESCAPE)) {
 			client_disconnect(client_p);
 			app_stop_running();
