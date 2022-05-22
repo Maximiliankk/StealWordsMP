@@ -122,15 +122,17 @@ void client_check_input()
 	}
 }
 void client_update_code(float dt)
-{
-	float offset = -19 * 70;
-	for(int i=0;i<26;i++)
+{	
+	float offset = -7 * 64;
+	for(int i=0;i<strlen(letterBuf);i++)
 	{
-		letter_sprites[i].transform.p.x = offset;
-		offset += 70;
-		letter_sprites[i].draw(batch_p);
+		int letter_index = letterBuf[i]-'a';
+		letter_sprites[letter_index].transform.p.x = offset;
+		letter_sprites[letter_index].transform.p.y = -100;
+		offset += 64;
+		letter_sprites[letter_index].draw(batch_p);
 	}
-	
+
 	batch_flush(batch_p);
 
 	uint64_t unix_time = unix_timestamp();
@@ -240,7 +242,7 @@ void client_init_code()
 	client_p = client_create(0, appID);
 	
 	// Must be unique for each different player in your game.
-	rnd_t rnd = rnd_seed((uint64_t)time(0));
+	rnd = rnd_seed((uint64_t)time(0));
 	uint64_t client_id = (uint64_t)rnd_next_range(rnd, 0, 9999999);
 	printf("my client ID is: %d", (int)client_id);
 
