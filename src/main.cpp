@@ -1,5 +1,5 @@
 /*************************************************************************************************/
-// Preprocessor definitions
+// Preprocessor
 /*************************************************************************************************/
 #define _CRT_SECURE_NO_WARNINGS
 #define _CRT_SECURE_NO_DEPRECATE
@@ -12,16 +12,18 @@ using namespace cute;
 #include <imgui/imgui.h>
 
 /*************************************************************************************************/
-// Function definitions
+// Function declarations
 /*************************************************************************************************/
-void mount_content_folder();
-uint64_t unix_timestamp();
 error_t make_test_connect_token(uint64_t unique_client_id, const char* address_and_port, uint8_t* connect_token_buffer);
 void client_update_code(float dt);
 void server_update_code(float dt);
 void main_loop();
-void server_init_code();
+void panic(error_t err);
+uint64_t unix_timestamp();
+void mount_content_folder();
 void client_init_code();
+void server_init_code();
+int main(int argc, const char** argv);
 
 /*************************************************************************************************/
 // Global data
@@ -49,7 +51,7 @@ unsigned char g_secret_key_data[64] = {
 };
 
 /*************************************************************************************************/
-// 
+// Function definitions
 /*************************************************************************************************/
 error_t make_test_connect_token(uint64_t unique_client_id, const char* address_and_port, uint8_t* connect_token_buffer)
 {
@@ -82,10 +84,6 @@ error_t make_test_connect_token(uint64_t unique_client_id, const char* address_a
 
 	return err;
 }
-
-/*************************************************************************************************/
-// 
-/*************************************************************************************************/
 void client_update_code(float dt)
 {
 	letterA.draw(batch_p);
@@ -120,10 +118,6 @@ void client_update_code(float dt)
 		exit(-1);
 	}
 }
-
-/*************************************************************************************************/
-// 
-/*************************************************************************************************/
 void server_update_code(float dt)
 {
 	uint64_t unix_time = unix_timestamp();
@@ -144,10 +138,6 @@ void server_update_code(float dt)
 		}
 	}
 }
-
-/*************************************************************************************************/
-// 
-/*************************************************************************************************/
 void main_loop()
 {
 	while (app_is_running())
@@ -168,19 +158,11 @@ void main_loop()
 	}
 	
 }
-
-/*************************************************************************************************/
-// 
-/*************************************************************************************************/
 void panic(error_t err)
 {
 	printf("ERROR: %s\n", err.details);
 	exit(-1);
 }
-
-/*************************************************************************************************/
-// 
-/*************************************************************************************************/
 uint64_t unix_timestamp()
 {
 	time_t ltime;
@@ -188,10 +170,6 @@ uint64_t unix_timestamp()
 	struct tm* timeinfo = gmtime(&ltime);;
 	return (uint64_t)mktime(timeinfo);
 }
-
-/*************************************************************************************************/
-// 
-/*************************************************************************************************/
 void mount_content_folder()
 {
 	char buf[1024];
@@ -203,10 +181,6 @@ void mount_content_folder()
 	strcat(buf, "/assets");
 	file_system_mount(buf, "");
 }
-
-/*************************************************************************************************/
-// 
-/*************************************************************************************************/
 void client_init_code()
 {
 	printf("Setting up Client");
@@ -225,10 +199,6 @@ void client_init_code()
 	err = client_connect(client_p, connect_token);
 	if (err.is_error()) panic(err);
 }
-
-/*************************************************************************************************/
-// 
-/*************************************************************************************************/
 void server_init_code()
 {
 	printf("Setting up Server");
@@ -245,10 +215,6 @@ void server_init_code()
 	error_t err = server_start(server, address_and_port);
 	if (err.is_error()) panic(err);
 }
-
-/*************************************************************************************************/
-// 
-/*************************************************************************************************/
 int main(int argc, const char** argv)
 {
 	uint32_t app_options = CUTE_APP_OPTIONS_DEFAULT_GFX_CONTEXT | CUTE_APP_OPTIONS_WINDOW_POS_CENTERED;
