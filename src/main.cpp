@@ -111,6 +111,13 @@ void client_check_input()
 			}
 		}	
 	}
+	if (key_was_pressed(KEY_BACKSPACE))
+	{
+		if(strlen(letterBuf))
+		{
+			letterBuf[strlen(letterBuf)-1] = '\0';
+		}
+	}
 }
 void client_update_code(float dt)
 {
