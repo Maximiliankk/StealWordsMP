@@ -36,13 +36,17 @@ sprite_t letter_sprites[26];
 
 rnd_t rnd;
 
+list_t strlist;
+
+dictionary<string_t, array<string_t>> fastDict;
+
 //#define CLIENT
 //#define SERVER
 
 //#ifdef CLIENT
 client_t* client_p;
 uint32_t client_id;
-const int letterBufSize = 20;
+const int letterBufSize = 15;
 char letterBuf[letterBufSize+1];
 //#endif
 
@@ -289,6 +293,61 @@ int main(int argc, const char** argv)
 #endif
 
 	app_init_imgui();
+	
+	const char* filedata;
+	size_t filesize = 0;
+	file_system_read_entire_file_to_memory_and_nul_terminate(
+		"wordlists/2sort.txt",
+		(void**)&filedata,
+		&filesize
+		);
+	
+	printf("filesize: %d", (int)filesize);
+
+	const char* cur = filedata;
+	const char* end = filedata + filesize;
+	while(cur < end)
+	{
+		array<string_t>* arr = nullptr;
+		
+		string_t tempkey = string_t(cur, cur + 2);
+		cur += 2;
+		//printf("1tempkey:%s\n", tempkey.c_str());
+		tempkey.incref();
+
+		cur++; // comma skip
+
+		string_t tempvalue = string_t(cur, cur + 4);
+		cur += 4;
+		//printf("2tempvalue:%s\n", tempvalue.c_str());
+		tempvalue.incref();
+
+		//printf("find...");
+		arr = fastDict.find(tempkey);
+		if(!arr)
+		{
+			//printf("inserting...");
+			fastDict.insert(tempkey, {tempvalue});
+		}
+		else
+		{
+			//printf("adding...");
+			arr->add(tempvalue);
+		}
+	}
+
+	printf("fastDict count: %d\n",fastDict.count());
+	//printf("key: %s", fastDict.keys()[0].c_str());
+	
+	for(int i=0;i<fastDict.count();i++)
+	{
+		printf("key: %s", fastDict.keys()[i].c_str());
+		for(int j=0;j<fastDict.items()[i].count();j++)
+		{
+			printf(", value: %s", fastDict.items()[i][j].c_str());
+		}
+		printf("\n");
+	}
 
 	// load sprites
 	{
@@ -319,6 +378,8 @@ int main(int argc, const char** argv)
 	letter_sprites[24] = sprite_make("art/letter_y.ase");
 	letter_sprites[25] = sprite_make("art/letter_z.ase");
 	}
+
+
 
 	main_loop();
 
