@@ -12,20 +12,6 @@ using namespace cute;
 #include <imgui/imgui.h>
 
 /*************************************************************************************************/
-// Function declarations
-/*************************************************************************************************/
-error_t make_test_connect_token(uint64_t unique_client_id, const char* address_and_port, uint8_t* connect_token_buffer);
-void client_update_code(float dt);
-void server_update_code(float dt);
-void main_loop();
-void panic(error_t err);
-uint64_t unix_timestamp();
-void mount_content_folder();
-void client_init_code();
-void server_init_code();
-int main(int argc, const char** argv);
-
-/*************************************************************************************************/
 // Global data
 /*************************************************************************************************/
 uint16_t port = 5001;
@@ -68,6 +54,20 @@ unsigned char g_secret_key_data[64] = {
 	0x4a,0xc5,0x56,0x47,0x30,0xbf,0xdc,0x22,0xc7,0x67,0x3b,0x23,0xc5,0x00,0x21,0x7e,
 	0x19,0x3e,0xa4,0xed,0xbc,0x0f,0x87,0x98,0x80,0xac,0x89,0x82,0x30,0xe9,0x95,0x6c
 };
+
+/*************************************************************************************************/
+// Function declarations
+/*************************************************************************************************/
+error_t make_test_connect_token(uint64_t unique_client_id, const char* address_and_port, uint8_t* connect_token_buffer);
+void client_update_code(float dt);
+void server_update_code(float dt);
+void main_loop();
+void panic(error_t err);
+uint64_t unix_timestamp();
+void mount_content_folder();
+void client_init_code();
+void server_init_code();
+int main(int argc, const char** argv);
 
 /*************************************************************************************************/
 // Function definitions
@@ -276,24 +276,8 @@ void server_init_code()
 	error_t err = server_start(server, address_and_port);
 	if (err.is_error()) panic(err);
 }
-int main(int argc, const char** argv)
+void load_assets()
 {
-	uint32_t app_options = CUTE_APP_OPTIONS_DEFAULT_GFX_CONTEXT | CUTE_APP_OPTIONS_WINDOW_POS_CENTERED;
-	app_make("Steal Words Multiplayer", 0, 0, 1024, 768, app_options, argv[0]);
-	batch_p = sprite_get_batch();
-	batch_set_projection(batch_p, matrix_ortho_2d(1024, 768, 0, 0));
-	mount_content_folder();
-
-#ifdef SERVER
-	server_init_code();
-#endif
-
-#ifdef CLIENT
-	client_init_code();
-#endif
-
-	app_init_imgui();
-	
 	const char* filedata;
 	size_t filesize = 0;
 	file_system_read_entire_file_to_memory_and_nul_terminate(
@@ -378,8 +362,26 @@ int main(int argc, const char** argv)
 	letter_sprites[24] = sprite_make("art/letter_y.ase");
 	letter_sprites[25] = sprite_make("art/letter_z.ase");
 	}
+}
+int main(int argc, const char** argv)
+{
+	uint32_t app_options = CUTE_APP_OPTIONS_DEFAULT_GFX_CONTEXT | CUTE_APP_OPTIONS_WINDOW_POS_CENTERED;
+	app_make("Steal Words Multiplayer", 0, 0, 1024, 768, app_options, argv[0]);
+	batch_p = sprite_get_batch();
+	batch_set_projection(batch_p, matrix_ortho_2d(1024, 768, 0, 0));
+	mount_content_folder();
 
+#ifdef SERVER
+	server_init_code();
+#endif
 
+#ifdef CLIENT
+	client_init_code();
+#endif
+
+	app_init_imgui();
+	
+	load_assets();
 
 	main_loop();
 
