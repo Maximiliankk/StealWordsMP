@@ -12,6 +12,7 @@ using namespace cute;
 #include <imgui/imgui.h>
 
 #define ENG_DICT_LINES 279498
+#define MAX_PILE_SIZE 100
 
 /*************************************************************************************************/
 // Global data
@@ -21,6 +22,7 @@ uint64_t appID = 234;
 
 batch_t* batch_p;
 sprite_t letter_sprites[26];
+sprite_t letter_back;
 
 rnd_t rnd;
 
@@ -31,11 +33,17 @@ hashtable_t engdict_words;
 //#define CLIENT
 //#define SERVER
 
+// both client and server use these
+char pileBuf[MAX_PILE_SIZE] = { '\0' };
+bool pileBufFlags[MAX_PILE_SIZE] = { false };
+
 //#ifdef CLIENT
 client_t* client_p;
 uint32_t client_id;
+
+// letters typed by a player
 const int letterBufSize = 15;
-char letterBuf[letterBufSize+1];
+char letterBuf[letterBufSize+1] = {0};
 //#endif
 
 //#ifdef SERVER
@@ -69,8 +77,11 @@ uint64_t unix_timestamp();
 void mount_content_folder();
 void client_init_code();
 void server_init_code();
+void load_eng_dict();
+void load_sorted_word_list(uint32_t n);
 void load_assets();
 bool is_a_word(const char* word);
+void init_game();
 int main(int argc, const char** argv);
 
 /*************************************************************************************************/
@@ -183,6 +194,46 @@ void client_update_code(float dt)
 }
 void server_update_code(float dt)
 {
+	if (key_was_pressed(KEY_RETURN)) {
+		init_game();
+	}
+
+	static float flip_timer = 0;
+	flip_timer += dt;
+	if (flip_timer > 2) {
+
+		pileBufFlags[rnd_next_range(rnd, 0, 97)] = true;
+
+		flip_timer = 0;
+	}
+
+	// render the pile
+	float yoffset =  5 * 64;
+	for (int i = 0; i < 9; i++)
+	{
+		float xoffset = -7 * 64;
+		for (int j = 0; j < 9; j++)
+		{
+			if (pileBufFlags[i * 10 + j])
+			{
+				int letter_index = pileBuf[i * 10 + j] - 'a';
+				letter_sprites[letter_index].transform.p.x = xoffset;
+				letter_sprites[letter_index].transform.p.y = yoffset;
+				xoffset += 64;
+				letter_sprites[letter_index].draw(batch_p);
+			}
+			else
+			{
+				letter_back.transform.p.x = xoffset;
+				letter_back.transform.p.y = yoffset;
+				xoffset += 64;
+				letter_back.draw(batch_p);
+			}
+		}
+		yoffset -= 64;
+	}
+	batch_flush(batch_p);
+
 	uint64_t unix_time = unix_timestamp();
 
 	server_update(server, dt, unix_time);
@@ -212,12 +263,10 @@ void main_loop()
 		client_update_code(dt);
 #endif
 
-		app_present();
-
 #ifdef SERVER
 		server_update_code(dt);
 #endif
-
+		app_present();
 	}
 	
 }
@@ -250,7 +299,6 @@ void client_init_code()
 	client_p = client_create(0, appID);
 	
 	// Must be unique for each different player in your game.
-	rnd = rnd_seed((uint64_t)time(0));
 	uint64_t client_id = (uint64_t)rnd_next_range(rnd, 0, 9999999);
 	printf("my client ID is: %d", (int)client_id);
 
@@ -266,6 +314,8 @@ void client_init_code()
 }
 void server_init_code()
 {
+	init_game();
+
 	printf("Setting up Server");
 	const char* address_and_port = "127.0.0.1:5001";
 	endpoint_t endpoint;
@@ -438,11 +488,41 @@ void load_assets()
 	letter_sprites[23] = sprite_make("art/letter_x.ase");
 	letter_sprites[24] = sprite_make("art/letter_y.ase");
 	letter_sprites[25] = sprite_make("art/letter_z.ase");
+	letter_back        = sprite_make("art/letter_back.ase");
 	}
 }
 bool is_a_word(const char* word)
 {
 	return true;
+}
+void Shuffle(char* str)
+{
+	int n = strlen(str);
+	while (n > 1)
+	{
+		n--;
+		// random num between 0 and n-1
+		int k = (int)rnd_next_range(rnd, 0, 25);
+
+		// swap with k with n
+		char value = str[k];
+		str[k] = str[n];
+		str[n] = value;
+	}
+}
+void init_game()
+{
+	// common letter distribution
+	//A - 9, B - 2, C - 2, D - 4, E - 12, F - 2, G - 3, H - 2, I - 9, J - 1, K - 1,
+	//L - 4, M - 2, N - 6, O - 8, P - 2, Q - 1, R - 6, S - 4, T - 6, U - 4, V - 2,
+	//W - 2, X - 1, Y - 2, Z - 1
+	const char* letter_distr = "aaaaaaaaabbccddddeeeeeeeeeeeeffggghhiiiiiiiiijkllllmmnnnnnnooooooooppqrrrrrrssssttttttuuuuvvwwxyyz";
+	for (int i = 0; i < strlen(letter_distr); i++)
+	{
+		pileBuf[i] = letter_distr[i];
+	}
+	Shuffle(pileBuf);
+	printf("\n%s", pileBuf);
 }
 int main(int argc, const char** argv)
 {
@@ -451,6 +531,7 @@ int main(int argc, const char** argv)
 	batch_p = sprite_get_batch();
 	batch_set_projection(batch_p, matrix_ortho_2d(1024, 768, 0, 0));
 	mount_content_folder();
+	rnd = rnd_seed((uint64_t)time(0));
 
 #ifdef SERVER
 	server_init_code();
