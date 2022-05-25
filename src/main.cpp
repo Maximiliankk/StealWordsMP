@@ -11,6 +11,8 @@ using namespace cute;
 #include <sokol/sokol_gfx_imgui.h>
 #include <imgui/imgui.h>
 
+#define ENG_DICT_LINES 279498
+
 /*************************************************************************************************/
 // Global data
 /*************************************************************************************************/
@@ -22,9 +24,9 @@ sprite_t letter_sprites[26];
 
 rnd_t rnd;
 
-list_t strlist;
-
 dictionary<string_t, array<string_t>> fastDict;
+//char engdict_words[ENG_DICT_LINES][20];
+hashtable_t engdict_words;
 
 //#define CLIENT
 //#define SERVER
@@ -278,6 +280,52 @@ void server_init_code()
 	error_t err = server_start(server, address_and_port);
 	if (err.is_error()) panic(err);
 }
+void load_eng_dict()
+{
+	const char* filedata;
+	char filepath[100] = "wordlists/engdict.txt";
+
+	size_t filesize = 0;
+	file_system_read_entire_file_to_memory_and_nul_terminate(
+		filepath,
+		(void**)&filedata,
+		&filesize
+		);
+
+	//hashtable_init(engdict_words, );
+
+	const char* cur = filedata;
+	const char* end = filedata + filesize;
+	//for(int i=0;i<ENG_DICT_LINES;i++)
+	for(int i=0;i<5;i++)
+	{
+		int linecount = 0;
+		bool foundSpace = false;
+		while(cur < end && *cur != '\n')
+		{
+			if (i >= 2) // skip first 2 lines
+			{
+				if (!foundSpace)
+				{
+					//engdict_words[i][linecount] = *cur;
+					//printf("\n%s", &);
+
+					if (*cur == ' ')
+					{
+						foundSpace = true;
+						//engdict_words[i][linecount + 1] = '\0';
+					}
+				}
+			}
+			linecount++;
+			cur++;
+		}
+		cur++; // skip \r
+	}
+
+	//printf("\n%s", &engdict_words[ENG_DICT_LINES - 2][0]);
+	//printf("\n%s", &engdict_words[ENG_DICT_LINES - 1][0]);
+}
 void load_sorted_word_list(uint32_t n)
 {
 	const char* filedata;
@@ -355,10 +403,12 @@ void load_sorted_word_list(uint32_t n)
 }
 void load_assets()
 {
-	for(int i=3;i<4;i++)
-	{
-		load_sorted_word_list(i);
-	}
+	// for(int i=3;i<4;i++)
+	// {
+	// 	load_sorted_word_list(i);
+	// }
+
+	//load_eng_dict();
 
 	// load sprites
 	{
