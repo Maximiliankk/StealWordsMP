@@ -67,6 +67,8 @@ uint64_t unix_timestamp();
 void mount_content_folder();
 void client_init_code();
 void server_init_code();
+void load_assets();
+bool is_a_word(const char* word);
 int main(int argc, const char** argv);
 
 /*************************************************************************************************/
@@ -276,17 +278,35 @@ void server_init_code()
 	error_t err = server_start(server, address_and_port);
 	if (err.is_error()) panic(err);
 }
-void load_assets()
+void load_sorted_word_list(uint32_t n)
 {
 	const char* filedata;
+	char filepath[100] = "wordlists/";
+	char onedigit[2];
+	onedigit[0] = (n < 10) ? ('0'+n) : ('0');
+	onedigit[1] = '\0';
+	char twodigits[3];
+	twodigits[0] = (n < 10) ? ('0') : ('0'+(n/10));
+	twodigits[1] = (n < 10) ? ('0') : ('0'+(n%10));
+	twodigits[2] = '\0';
+	//printf("\nonedigit:  %s", onedigit);
+	//printf("\ntwodigits: %s", twodigits);
+
+	//printf("\nfilepath: %s", filepath);
+	strcat(filepath, (n < 10) ? onedigit : twodigits);
+	//printf("\nfilepath: %s", filepath);
+	strcat(filepath, "sort.txt");
+	
+	printf("\nfilepath: %s", filepath);
+
 	size_t filesize = 0;
 	file_system_read_entire_file_to_memory_and_nul_terminate(
-		"wordlists/2sort.txt",
+		filepath,
 		(void**)&filedata,
 		&filesize
 		);
 	
-	printf("filesize: %d", (int)filesize);
+	printf("\nfilesize: %d", (int)filesize);
 
 	const char* cur = filedata;
 	const char* end = filedata + filesize;
@@ -294,43 +314,50 @@ void load_assets()
 	{
 		array<string_t>* arr = nullptr;
 		
-		string_t tempkey = string_t(cur, cur + 2);
-		cur += 2;
-		//printf("1tempkey:%s\n", tempkey.c_str());
+		string_t tempkey = string_t(cur, cur + n);
+		cur += n;
+		printf("\n1tempkey:%s\n", tempkey.c_str());
 		tempkey.incref();
 
 		cur++; // comma skip
 
-		string_t tempvalue = string_t(cur, cur + 4);
-		cur += 4;
-		//printf("2tempvalue:%s\n", tempvalue.c_str());
+		string_t tempvalue = string_t(cur, cur + n);
+		cur += n + 2;
+		printf("\n2tempvalue:%s", tempvalue.c_str());
 		tempvalue.incref();
 
-		//printf("find...");
 		arr = fastDict.find(tempkey);
 		if(!arr)
 		{
-			//printf("inserting...");
+			int temp = fastDict.count();
+			printf("\ninserting key #%d", temp);
 			fastDict.insert(tempkey, {tempvalue});
 		}
 		else
 		{
-			//printf("adding...");
+			printf("\nadding...");
 			arr->add(tempvalue);
 		}
 	}
 
-	printf("fastDict count: %d\n",fastDict.count());
+	printf("\nfastDict count: %d\n",fastDict.count());
 	//printf("key: %s", fastDict.keys()[0].c_str());
 	
-	for(int i=0;i<fastDict.count();i++)
+	// for(int i=0;i<fastDict.count();i++)
+	// {
+	// 	printf("key: %s", fastDict.keys()[i].c_str());
+	// 	for(int j=0;j<fastDict.items()[i].count();j++)
+	// 	{
+	// 		printf(", value: %s", fastDict.items()[i][j].c_str());
+	// 	}
+	// 	printf("\n");
+	// }
+}
+void load_assets()
+{
+	for(int i=3;i<4;i++)
 	{
-		printf("key: %s", fastDict.keys()[i].c_str());
-		for(int j=0;j<fastDict.items()[i].count();j++)
-		{
-			printf(", value: %s", fastDict.items()[i][j].c_str());
-		}
-		printf("\n");
+		load_sorted_word_list(i);
 	}
 
 	// load sprites
@@ -362,6 +389,10 @@ void load_assets()
 	letter_sprites[24] = sprite_make("art/letter_y.ase");
 	letter_sprites[25] = sprite_make("art/letter_z.ase");
 	}
+}
+bool is_a_word(const char* word)
+{
+	return true;
 }
 int main(int argc, const char** argv)
 {
