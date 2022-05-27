@@ -27,8 +27,8 @@ sprite_t letter_back;
 rnd_t rnd;
 
 dictionary<string_t, array<string_t>> fastDict;
-//char engdict_words[ENG_DICT_LINES][20];
-hashtable_t engdict_words;
+char engdict_words[ENG_DICT_LINES][20];
+//hashtable_t engdict_words;
 
 //#define CLIENT
 //#define SERVER
@@ -120,13 +120,14 @@ error_t make_test_connect_token(uint64_t unique_client_id, const char* address_a
 }
 void client_check_input()
 {
+	int cap_diff = 'a' - 'A';
 	for(int i='a';i<='z';++i)
 	{
 		if (key_was_pressed(key_button_t(i))) {
 			if(strlen(letterBuf) < letterBufSize)
 			{
 				char letter[2];
-				letter[0] = i;
+				letter[0] = i - cap_diff;
 				letter[1] = '\0';
 				strcat(letterBuf, letter);
 			}
@@ -145,7 +146,7 @@ void client_update_code(float dt)
 	float offset = -7 * 64;
 	for(int i=0;i<strlen(letterBuf);i++)
 	{
-		int letter_index = letterBuf[i]-'a';
+		int letter_index = letterBuf[i]-'A';
 		letter_sprites[letter_index].transform.p.x = offset;
 		letter_sprites[letter_index].transform.p.y = -100;
 		offset += 64;
@@ -167,14 +168,14 @@ void client_update_code(float dt)
 			printf("Connected! Press ESC to gracefully disconnect.\n");
 		}
 
-		static float t = 0;
+		/*static float t = 0;
 		t += dt;
 		if (t > 2) {
 			const char* data = "What's up over there, Mr. Server?";
 			int size = (int)strlen(data) + 1;
 			client_send(client_p, data, size, false);
 			t = 0;
-		}
+		}*/
 
 		if (key_was_pressed(KEY_RETURN)) {
 			char data[50];
@@ -245,6 +246,18 @@ void server_update_code(float dt)
 		}
 		else if (e.type == SERVER_EVENT_TYPE_PAYLOAD_PACKET) {
 			printf("Got a message from client on index %d, \"%s\"\n", e.u.payload_packet.client_index, (const char*)e.u.payload_packet.data);
+			if (strcmp((const char*)e.u.payload_packet.data,"kp:enter:"))
+			{
+				printf("A player is trying to make word: %s\n", (const char*)e.u.payload_packet.data);
+				if (is_a_word(((const char*)e.u.payload_packet.data)+9))
+				{
+					printf("It is a word!\n");
+				}
+				else
+				{
+					printf("It is not a word...\n");
+				}
+			}
 			server_free_packet(server, e.u.payload_packet.client_index, e.u.payload_packet.data);
 		}
 		else if (e.type == SERVER_EVENT_TYPE_DISCONNECTED) {
@@ -315,6 +328,7 @@ void client_init_code()
 void server_init_code()
 {
 	init_game();
+	is_a_word("AA");
 
 	printf("Setting up Server");
 	const char* address_and_port = "127.0.0.1:5001";
@@ -346,8 +360,8 @@ void load_eng_dict()
 
 	const char* cur = filedata;
 	const char* end = filedata + filesize;
-	//for(int i=0;i<ENG_DICT_LINES;i++)
-	for(int i=0;i<5;i++)
+	for(int i=0;i<ENG_DICT_LINES;i++)
+	//for(int i=0;i<5;i++)
 	{
 		int linecount = 0;
 		bool foundSpace = false;
@@ -357,13 +371,13 @@ void load_eng_dict()
 			{
 				if (!foundSpace)
 				{
-					//engdict_words[i][linecount] = *cur;
+					engdict_words[i-2][linecount] = *cur;
 					//printf("\n%s", &);
 
 					if (*cur == ' ')
 					{
 						foundSpace = true;
-						//engdict_words[i][linecount + 1] = '\0';
+						engdict_words[i-2][linecount + 1] = '\0';
 					}
 				}
 			}
@@ -373,8 +387,9 @@ void load_eng_dict()
 		cur++; // skip \r
 	}
 
-	//printf("\n%s", &engdict_words[ENG_DICT_LINES - 2][0]);
-	//printf("\n%s", &engdict_words[ENG_DICT_LINES - 1][0]);
+	printf("\n%s", &engdict_words[ENG_DICT_LINES - 3][0]);
+	printf("\n%s", &engdict_words[ENG_DICT_LINES - 2][0]);
+	printf("\n%s", &engdict_words[ENG_DICT_LINES - 1][0]);
 }
 void load_sorted_word_list(uint32_t n)
 {
@@ -458,7 +473,7 @@ void load_assets()
 	// 	load_sorted_word_list(i);
 	// }
 
-	//load_eng_dict();
+	load_eng_dict();
 
 	// load sprites
 	{
@@ -493,7 +508,28 @@ void load_assets()
 }
 bool is_a_word(const char* word)
 {
-	return true;
+	int wordlen = strlen(word);
+	for (int i = 0; i < ENG_DICT_LINES; ++i)
+	{
+		for (int j = 0; j < 15; ++j)
+		{
+			if (word[j] == engdict_words[i][j])
+			{
+				if (j == wordlen-1)
+				{
+					// make sure there is a null-terminator
+					// or else it might be just the first part
+					// of a word
+					return engdict_words[i][j+1] == '\0';
+				}
+			}
+			else
+			{
+				break;
+			}
+		}
+	}
+	return false;
 }
 void Shuffle(char* str)
 {
@@ -512,7 +548,7 @@ void Shuffle(char* str)
 }
 void init_game()
 {
-	// common letter distribution
+	// common letter distribution for popular word games
 	//A - 9, B - 2, C - 2, D - 4, E - 12, F - 2, G - 3, H - 2, I - 9, J - 1, K - 1,
 	//L - 4, M - 2, N - 6, O - 8, P - 2, Q - 1, R - 6, S - 4, T - 6, U - 4, V - 2,
 	//W - 2, X - 1, Y - 2, Z - 1
@@ -533,6 +569,8 @@ int main(int argc, const char** argv)
 	mount_content_folder();
 	rnd = rnd_seed((uint64_t)time(0));
 
+	load_assets();
+
 #ifdef SERVER
 	server_init_code();
 #endif
@@ -543,7 +581,6 @@ int main(int argc, const char** argv)
 
 	app_init_imgui();
 	
-	load_assets();
 
 	main_loop();
 
