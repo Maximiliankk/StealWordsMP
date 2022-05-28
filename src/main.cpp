@@ -13,6 +13,8 @@ using namespace cute;
 #include <stdlib.h>     /* qsort */
 
 #define ENG_DICT_LINES 279498
+#define MAX_WORD_LEN 15
+#define MAX_DICT_WORD_LEN 20
 #define PILE_DIM 10
 #define MAX_PILE_SIZE PILE_DIM*PILE_DIM
 
@@ -29,7 +31,7 @@ sprite_t letter_back;
 rnd_t rnd;
 
 dictionary<string_t, array<string_t>> fastDict;
-char engdict_words[ENG_DICT_LINES][20];
+char engdict_words[ENG_DICT_LINES][MAX_DICT_WORD_LEN];
 //hashtable_t engdict_words;
 
 //#define CLIENT
@@ -52,8 +54,7 @@ client_t* client_p;
 uint32_t client_id;
 
 // letters typed by a player
-const int letterBufSize = 15;
-char letterBuf[letterBufSize+1] = {0};
+char letterBuf[MAX_WORD_LEN+1] = {0};
 //#endif
 
 //#ifdef SERVER
@@ -76,29 +77,11 @@ unsigned char g_secret_key_data[64] = {
 };
 
 /*************************************************************************************************/
-// Function declarations
-/*************************************************************************************************/
-error_t make_test_connect_token(uint64_t unique_client_id, const char* address_and_port, uint8_t* connect_token_buffer);
-void client_update_code(float dt);
-void server_update_code(float dt);
-void main_loop();
-void panic(error_t err);
 uint64_t unix_timestamp();
-void mount_content_folder();
-void client_init_code();
-void server_init_code();
-void load_eng_dict();
-void load_sorted_word_list(uint32_t n);
-void load_assets();
 bool is_a_word(const char* word);
-void init_game();
-int sortPileCompare(const void* a, const void* b);
 void sortPile();
-char getPileVal(int i, int j);
-int main(int argc, const char** argv);
+bool canPileSteal(const char* str);
 
-/*************************************************************************************************/
-// Function definitions
 /*************************************************************************************************/
 error_t make_test_connect_token(uint64_t unique_client_id, const char* address_and_port, uint8_t* connect_token_buffer)
 {
@@ -131,13 +114,13 @@ error_t make_test_connect_token(uint64_t unique_client_id, const char* address_a
 
 	return err;
 }
-void client_check_input()
+void update_letterBuf()
 {
 	int cap_diff = 'a' - 'A';
 	for(int i='a';i<='z';++i)
 	{
 		if (key_was_pressed(key_button_t(i))) {
-			if(strlen(letterBuf) < letterBufSize)
+			if(strlen(letterBuf) < MAX_WORD_LEN)
 			{
 				char letter[2];
 				letter[0] = i - cap_diff;
@@ -181,23 +164,9 @@ void render_string(const char* str, int spacing, v2 pos, float scale)
 }
 void client_update_code(float dt)
 {	
-	float offset = -7 * 64;
-	for(int i=0;i<strlen(letterBuf);i++)
-	{
-		int letter_index = letterBuf[i]-'A';
-		letter_sprites[letter_index].transform.p.x = offset;
-		letter_sprites[letter_index].transform.p.y = -100;
-		offset += 64;
-		letter_sprites[letter_index].draw(batch_p);
-	}
-
-	batch_flush(batch_p);
-
 	uint64_t unix_time = unix_timestamp();
 
 	client_update(client_p, dt, unix_time);
-
-	client_check_input();
 
 	if (client_state_get(client_p) == CLIENT_STATE_CONNECTED) {
 		static bool notify = false;
@@ -205,15 +174,6 @@ void client_update_code(float dt)
 			notify = true;
 			printf("Connected! Press ESC to gracefully disconnect.\n");
 		}
-
-		/*static float t = 0;
-		t += dt;
-		if (t > 2) {
-			const char* data = "What's up over there, Mr. Server?";
-			int size = (int)strlen(data) + 1;
-			client_send(client_p, data, size, false);
-			t = 0;
-		}*/
 
 		if (key_was_pressed(KEY_RETURN)) {
 			char data[50];
@@ -233,13 +193,9 @@ void client_update_code(float dt)
 }
 void server_update_code(float dt)
 {
-	if (key_was_pressed(KEY_RETURN)) {
-		init_game();
-	}
-
 	static float flip_timer = 0;
 	flip_timer += dt;
-	if (flip_timer > 4) {
+	if (flip_timer > (pileFaceupCount+1)) {
 
 		pileBufFlags[rnd_next_range(rnd, 0, 97)] = pileTileState::faceup;
 		flip_timer = 0;
@@ -311,6 +267,19 @@ void server_update_code(float dt)
 			printf("Client disconnected on index %d.\n", e.u.disconnected.client_index);
 		}
 	}
+
+	if (key_was_pressed(KEY_RETURN)) {
+		if (canPileSteal(letterBuf))
+		{
+			/*char* word_p = letterBuf;
+			for (int i = 0; i < strlen(letterBuf); ++i)
+			{
+				char* ch_p = strchr(pileBuf, letterBuf[i]);
+				int ch_index = ch_p - letterBuf;
+				pileBufFlags[ch_index] = pileTileState::empty;
+			}*/
+		}
+	}
 }
 void main_loop()
 {
@@ -318,6 +287,20 @@ void main_loop()
 	{
 		float dt = calc_dt();
 		app_update(dt);
+
+		// typing
+		update_letterBuf();
+		float offset = -7 * 64;
+		for (int i = 0; i < strlen(letterBuf); i++)
+		{
+			int letter_index = letterBuf[i] - 'A';
+			letter_sprites[letter_index].transform.p.x = offset;
+			letter_sprites[letter_index].transform.p.y = -300;
+			offset += 64;
+			letter_sprites[letter_index].draw(batch_p);
+		}
+
+		batch_flush(batch_p);
 
 #ifdef CLIENT
 		client_update_code(dt);
@@ -328,7 +311,6 @@ void main_loop()
 #endif
 		app_present();
 	}
-	
 }
 void panic(error_t err)
 {
@@ -555,7 +537,7 @@ bool is_a_word(const char* word)
 	int wordlen = strlen(word);
 	for (int i = 0; i < ENG_DICT_LINES; ++i)
 	{
-		for (int j = 0; j < 15; ++j)
+		for (int j = 0; j < MAX_WORD_LEN; ++j)
 		{
 			if (word[j] == engdict_words[i][j])
 			{
@@ -618,11 +600,11 @@ char getPileVal(int i, int j)
 {
 	return pileBuf[i * PILE_DIM + j];
 }
-const char* getSortedPile()
+char* getSortedPile()
 {
 	return &pileSorted[MAX_PILE_SIZE - pileFaceupCount];
 }
-int sortPileCompare(const void* a, const void* b)
+int sortCharsCompare(const void* a, const void* b)
 {
 	return (*(char*)a - *(char*)b);
 }
@@ -636,8 +618,35 @@ void sortPile()
 		else
 			pileSorted[i] = '0';
 	}
-	qsort(pileSorted, MAX_PILE_SIZE, sizeof(char), sortPileCompare);
+	qsort(pileSorted, MAX_PILE_SIZE, sizeof(char), sortCharsCompare);
 	printf("sorted pile: %s\n", getSortedPile());
+}
+bool canPileSteal(const char* str)
+{
+	char word[MAX_WORD_LEN+1] = {'\0'};
+	strcpy(word, str);
+	int wordlen = strlen(word);
+	qsort(word, wordlen, sizeof(char), sortCharsCompare);
+	char* pile = getSortedPile();
+	bool tempPileFlags[MAX_PILE_SIZE] = { false };
+
+	// for each letter in the word
+	char* word_p = word;
+	for (int i = 0; i < wordlen; ++i)
+	{
+		// we should be able to increment through the sorted pile
+		// and find all the letters in order
+
+		// while the pile pointer is not null and
+		// the chars are not equal
+		while (pile != '\0' && *word_p != *pile)
+		{
+			pile++; // next pile char
+		}
+		word_p++; // next word char
+		pile++; // next pile char
+	}
+	return true;
 }
 int main(int argc, const char** argv)
 {
