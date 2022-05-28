@@ -10,6 +10,7 @@ using namespace cute;
 #include <cute/cute_path.h>
 #include <sokol/sokol_gfx_imgui.h>
 #include <imgui/imgui.h>
+#include <stdlib.h>     /* qsort */
 
 #define ENG_DICT_LINES 279498
 #define PILE_DIM 10
@@ -36,7 +37,15 @@ char engdict_words[ENG_DICT_LINES][20];
 
 // both client and server use these
 char pileBuf[MAX_PILE_SIZE] = { '\0' };
-int pileBufFlags[MAX_PILE_SIZE] = { 0 }; // 0 = empty, 1 = face-down, 2 = face-up
+int pileBufFlags[MAX_PILE_SIZE] = { 0 };
+char pileSorted[MAX_PILE_SIZE+1] = { '\0' };
+int pileFaceupCount = 0;
+enum pileTileState
+{
+	empty,
+	facedown,
+	faceup
+};
 
 //#ifdef CLIENT
 client_t* client_p;
@@ -83,6 +92,8 @@ void load_sorted_word_list(uint32_t n);
 void load_assets();
 bool is_a_word(const char* word);
 void init_game();
+int sortPileCompare(const void* a, const void* b);
+void sortPile();
 char getPileVal(int i, int j);
 int main(int argc, const char** argv);
 
@@ -228,11 +239,13 @@ void server_update_code(float dt)
 
 	static float flip_timer = 0;
 	flip_timer += dt;
-	if (flip_timer > 2) {
+	if (flip_timer > 4) {
 
-		pileBufFlags[rnd_next_range(rnd, 0, 97)] = 2;
-
+		pileBufFlags[rnd_next_range(rnd, 0, 97)] = pileTileState::faceup;
 		flip_timer = 0;
+		pileFaceupCount++;
+
+		sortPile();
 	}
 
 	// render the pile
@@ -242,7 +255,7 @@ void server_update_code(float dt)
 		float xoffset = -7 * 64 - 25;
 		for (int j = 0; j < PILE_DIM; j++)
 		{
-			if (pileBufFlags[i * 10 + j] == 2) // face-up
+			if (pileBufFlags[i * 10 + j] == pileTileState::faceup)
 			{
 				int letter_index = pileBuf[i * 10 + j] - 'A';
 				letter_sprites[letter_index].transform.p.x = xoffset;
@@ -250,7 +263,7 @@ void server_update_code(float dt)
 				xoffset += 64;
 				letter_sprites[letter_index].draw(batch_p);
 			}
-			else if (pileBufFlags[i * 10 + j] == 1) // face-down
+			else if (pileBufFlags[i * 10 + j] == pileTileState::facedown)
 			{
 				letter_back.transform.p.x = xoffset;
 				letter_back.transform.p.y = yoffset;
@@ -260,13 +273,12 @@ void server_update_code(float dt)
 		}
 		yoffset -= 64;
 	}
-	batch_flush(batch_p);
 
 	// each player
-	render_string("TEST", letter_sprites[0].w / 4, v2(4 * 64, 11 * 32), 0.3);
-	render_string("HELLO", letter_sprites[0].w / 4, v2(4 * 64, 7 * 32), 0.3);
-	render_string("T", letter_sprites[0].w / 4, v2(4 * 64, 4 * 32), 0.3);
-	render_string("ABCDEF", letter_sprites[0].w / 4, v2(4 * 64, 1 * 32), 0.3);
+	render_string("PLAYERONE"  , letter_sprites[0].w / 4, v2(4 * 64, 11 * 32), 0.3);
+	render_string("PLAYERTWO"  , letter_sprites[0].w / 4, v2(4 * 64, 7 * 32), 0.3);
+	render_string("PLAYERTHREE", letter_sprites[0].w / 4, v2(4 * 64, 4 * 32), 0.3);
+	render_string("PLAYERFOUR" , letter_sprites[0].w / 4, v2(4 * 64, 1 * 32), 0.3);
 
 	batch_flush(batch_p);
 
@@ -362,14 +374,6 @@ void client_init_code()
 }
 void server_init_code()
 {
-	init_game();
-	is_a_word("AA");
-
-	for (int i = 0; i < MAX_PILE_SIZE; i++)
-	{
-		pileBufFlags[i] = 1; // face-down
-	}
-
 	printf("Setting up Server");
 	const char* address_and_port = "127.0.0.1:5001";
 	endpoint_t endpoint;
@@ -588,6 +592,13 @@ void Shuffle(char* str)
 }
 void init_game()
 {
+	for (int i = 0; i < MAX_PILE_SIZE; i++)
+	{
+		pileBuf[i] = '\0';
+		pileBufFlags[i] = pileTileState::facedown;
+		pileSorted[i] = '\0';
+	}
+
 	// common letter distribution for popular word games
 	//A - 9, B - 2, C - 2, D - 4, E - 12, F - 2, G - 3, H - 2, I - 9, J - 1, K - 1,
 	//L - 4, M - 2, N - 6, O - 8, P - 2, Q - 1, R - 6, S - 4, T - 6, U - 4, V - 2,
@@ -599,10 +610,34 @@ void init_game()
 	}
 	Shuffle(pileBuf);
 	printf("\n%s", pileBuf);
+
+	is_a_word("AA");
+
 }
 char getPileVal(int i, int j)
 {
 	return pileBuf[i * PILE_DIM + j];
+}
+const char* getSortedPile()
+{
+	return &pileSorted[MAX_PILE_SIZE - pileFaceupCount];
+}
+int sortPileCompare(const void* a, const void* b)
+{
+	return (*(char*)a - *(char*)b);
+}
+void sortPile()
+{
+	//memcpy(pileSorted, pileBuf, MAX_PILE_SIZE);
+	for (int i = 0; i < MAX_PILE_SIZE; i++)
+	{
+		if (pileBufFlags[i] == pileTileState::faceup)
+			pileSorted[i] = pileBuf[i];
+		else
+			pileSorted[i] = '0';
+	}
+	qsort(pileSorted, MAX_PILE_SIZE, sizeof(char), sortPileCompare);
+	printf("sorted pile: %s\n", getSortedPile());
 }
 int main(int argc, const char** argv)
 {
@@ -613,6 +648,8 @@ int main(int argc, const char** argv)
 	mount_content_folder();
 	rnd = rnd_seed((uint64_t)time(0));
 
+	app_init_imgui();
+	init_game();
 	load_assets();
 
 #ifdef SERVER
@@ -622,9 +659,6 @@ int main(int argc, const char** argv)
 #ifdef CLIENT
 	client_init_code();
 #endif
-
-	app_init_imgui();
-	
 
 	main_loop();
 
