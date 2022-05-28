@@ -12,7 +12,8 @@ using namespace cute;
 #include <imgui/imgui.h>
 
 #define ENG_DICT_LINES 279498
-#define MAX_PILE_SIZE 100
+#define PILE_DIM 10
+#define MAX_PILE_SIZE PILE_DIM*PILE_DIM
 
 /*************************************************************************************************/
 // Global data
@@ -35,7 +36,7 @@ char engdict_words[ENG_DICT_LINES][20];
 
 // both client and server use these
 char pileBuf[MAX_PILE_SIZE] = { '\0' };
-bool pileBufFlags[MAX_PILE_SIZE] = { false };
+int pileBufFlags[MAX_PILE_SIZE] = { 0 }; // 0 = empty, 1 = face-down, 2 = face-up
 
 //#ifdef CLIENT
 client_t* client_p;
@@ -82,6 +83,7 @@ void load_sorted_word_list(uint32_t n);
 void load_assets();
 bool is_a_word(const char* word);
 void init_game();
+char getPileVal(int i, int j);
 int main(int argc, const char** argv);
 
 /*************************************************************************************************/
@@ -139,6 +141,31 @@ void client_check_input()
 		{
 			letterBuf[strlen(letterBuf)-1] = '\0';
 		}
+	}
+}
+sprite_t* get_letter_sprite(char c)
+{
+	if(c >= 'A' && c <= 'Z') 
+		return &letter_sprites[c - 'A'];
+
+	if(c >= 'a' && c <= 'z')
+		return &letter_sprites[c - 'a'];
+}
+void render_string(const char* str, int spacing, v2 pos, float scale)
+{
+	float xoffs = pos.x;
+	float yoffs = pos.y;
+	for (int i = 0; i < strlen(str); i++)
+	{
+		sprite_t* spr = get_letter_sprite(str[i]);
+		spr->transform.p.x = xoffs;
+		spr->transform.p.y = yoffs;
+		spr->scale.x = scale;
+		spr->scale.y = scale;
+		xoffs += spacing;
+		spr->draw(batch_p);
+		spr->scale.x = 1;
+		spr->scale.y = 1;
 	}
 }
 void client_update_code(float dt)
@@ -203,27 +230,27 @@ void server_update_code(float dt)
 	flip_timer += dt;
 	if (flip_timer > 2) {
 
-		pileBufFlags[rnd_next_range(rnd, 0, 97)] = true;
+		pileBufFlags[rnd_next_range(rnd, 0, 97)] = 2;
 
 		flip_timer = 0;
 	}
 
 	// render the pile
-	float yoffset =  5 * 64;
-	for (int i = 0; i < 9; i++)
+	float yoffset =  5 * 64 + 20;
+	for (int i = 0; i < PILE_DIM; i++)
 	{
-		float xoffset = -7 * 64;
-		for (int j = 0; j < 9; j++)
+		float xoffset = -7 * 64 - 25;
+		for (int j = 0; j < PILE_DIM; j++)
 		{
-			if (pileBufFlags[i * 10 + j])
+			if (pileBufFlags[i * 10 + j] == 2) // face-up
 			{
-				int letter_index = pileBuf[i * 10 + j] - 'a';
+				int letter_index = pileBuf[i * 10 + j] - 'A';
 				letter_sprites[letter_index].transform.p.x = xoffset;
 				letter_sprites[letter_index].transform.p.y = yoffset;
 				xoffset += 64;
 				letter_sprites[letter_index].draw(batch_p);
 			}
-			else
+			else if (pileBufFlags[i * 10 + j] == 1) // face-down
 			{
 				letter_back.transform.p.x = xoffset;
 				letter_back.transform.p.y = yoffset;
@@ -233,6 +260,14 @@ void server_update_code(float dt)
 		}
 		yoffset -= 64;
 	}
+	batch_flush(batch_p);
+
+	// each player
+	render_string("TEST", letter_sprites[0].w / 4, v2(4 * 64, 11 * 32), 0.3);
+	render_string("HELLO", letter_sprites[0].w / 4, v2(4 * 64, 7 * 32), 0.3);
+	render_string("T", letter_sprites[0].w / 4, v2(4 * 64, 4 * 32), 0.3);
+	render_string("ABCDEF", letter_sprites[0].w / 4, v2(4 * 64, 1 * 32), 0.3);
+
 	batch_flush(batch_p);
 
 	uint64_t unix_time = unix_timestamp();
@@ -329,6 +364,11 @@ void server_init_code()
 {
 	init_game();
 	is_a_word("AA");
+
+	for (int i = 0; i < MAX_PILE_SIZE; i++)
+	{
+		pileBufFlags[i] = 1; // face-down
+	}
 
 	printf("Setting up Server");
 	const char* address_and_port = "127.0.0.1:5001";
@@ -552,7 +592,7 @@ void init_game()
 	//A - 9, B - 2, C - 2, D - 4, E - 12, F - 2, G - 3, H - 2, I - 9, J - 1, K - 1,
 	//L - 4, M - 2, N - 6, O - 8, P - 2, Q - 1, R - 6, S - 4, T - 6, U - 4, V - 2,
 	//W - 2, X - 1, Y - 2, Z - 1
-	const char* letter_distr = "aaaaaaaaabbccddddeeeeeeeeeeeeffggghhiiiiiiiiijkllllmmnnnnnnooooooooppqrrrrrrssssttttttuuuuvvwwxyyz";
+	const char* letter_distr = "AAAAAAAAABBCCDDDDEEEEEEEEEEEEFFGGGHHIIIIIIIIIJKLLLLMMNNNNNNNOOOOOOOOPPQRRRRRRSSSSTTTTTTUUUUVVWWXYYZ";
 	for (int i = 0; i < strlen(letter_distr); i++)
 	{
 		pileBuf[i] = letter_distr[i];
@@ -560,10 +600,14 @@ void init_game()
 	Shuffle(pileBuf);
 	printf("\n%s", pileBuf);
 }
+char getPileVal(int i, int j)
+{
+	return pileBuf[i * PILE_DIM + j];
+}
 int main(int argc, const char** argv)
 {
 	uint32_t app_options = CUTE_APP_OPTIONS_DEFAULT_GFX_CONTEXT | CUTE_APP_OPTIONS_WINDOW_POS_CENTERED;
-	app_make("Steal Words Multiplayer", 0, 0, 1024, 768, app_options, argv[0]);
+	app_make("Steal Words Multiplayer", 0, 0, 2000, 1300, app_options, argv[0]);
 	batch_p = sprite_get_batch();
 	batch_set_projection(batch_p, matrix_ortho_2d(1024, 768, 0, 0));
 	mount_content_folder();
