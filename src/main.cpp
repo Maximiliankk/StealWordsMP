@@ -14,7 +14,7 @@ using namespace cute;
 #define ENG_DICT_LINES 279498
 #define MAX_WORD_LEN 15
 #define MAX_DICT_WORD_LEN 20
-#define PILE_DIM 10
+#define PILE_DIM 4
 #define MAX_PILE_SIZE PILE_DIM*PILE_DIM
 
 /*************************************************************************************************/
@@ -201,12 +201,19 @@ void server_update_code(float dt)
 	flip_timer += dt;
 	if (flip_timer > (pileFaceupCount+1))
 	{
-		int index = rnd_next_range(rnd, 0, 97);
-		while (pileBufFlags[index] != pileTileState::facedown) { index = rnd_next_range(rnd, 0, 97); }
-		pileBufFlags[index] = pileTileState::faceup;
-		flip_timer = 0;
-		pileFaceupCount++;
-		sortPile();
+		if (pileFaceupCount == MAX_PILE_SIZE)
+		{
+			printf("\nGG! Game is done!\n");
+		}
+		else
+		{
+			int index = rnd_next_range(rnd, 0, MAX_PILE_SIZE - 1);
+			while (pileBufFlags[index] != pileTileState::facedown) { index = rnd_next_range(rnd, 0, MAX_PILE_SIZE - 1); }
+			pileBufFlags[index] = pileTileState::faceup;
+			flip_timer = 0;
+			pileFaceupCount++;
+			sortPile();
+		}
 	}
 
 	// render the pile
@@ -216,14 +223,14 @@ void server_update_code(float dt)
 		float xoffset = -7 * 64 - 25;
 		for (int j = 0; j < PILE_DIM; j++)
 		{
-			if (pileBufFlags[i * 10 + j] == pileTileState::faceup)
+			if (pileBufFlags[i * PILE_DIM + j] == pileTileState::faceup)
 			{
-				int letter_index = pileBuf[i * 10 + j] - 'A';
+				int letter_index = pileBuf[i * PILE_DIM + j] - 'A';
 				letter_sprites[letter_index].transform.p.x = xoffset;
 				letter_sprites[letter_index].transform.p.y = yoffset;
 				letter_sprites[letter_index].draw(batch_p);
 			}
-			else if (pileBufFlags[i * 10 + j] == pileTileState::facedown)
+			else if (pileBufFlags[i * PILE_DIM + j] == pileTileState::facedown)
 			{
 				letter_back.transform.p.x = xoffset;
 				letter_back.transform.p.y = yoffset;
@@ -252,18 +259,18 @@ void server_update_code(float dt)
 			printf("New connection from id %d, on index %d.\n", (int)e.u.new_connection.client_id, e.u.new_connection.client_index);
 		}
 		else if (e.type == SERVER_EVENT_TYPE_PAYLOAD_PACKET) {
-			printf("Got a message from client on index %d, \"%s\"\n", e.u.payload_packet.client_index, (const char*)e.u.payload_packet.data);
-			if (strcmp((const char*)e.u.payload_packet.data,"kp:enter:"))
+			const char* msg = (const char*)e.u.payload_packet.data;
+			printf("Got a message from client on index %d, \"%s\"\n", e.u.payload_packet.client_index, msg);
+			const char* msg_header = "kp:enter:";
+			const int msg_header_len = strlen(msg_header);
+			if (strcmp(msg, msg_header))
 			{
-				printf("A player is trying to make word: %s\n", (const char*)e.u.payload_packet.data);
-				if (is_a_word(((const char*)e.u.payload_packet.data)+9))
-				{
+				const char* word = (const char*)e.u.payload_packet.data + msg_header_len; // skip the header
+				printf("A player is trying to make word: %s\n", word);
+				if (is_a_word(word))
 					printf("It is a word!\n");
-				}
 				else
-				{
 					printf("It is not a word...\n");
-				}
 			}
 			server_free_packet(server, e.u.payload_packet.client_index, e.u.payload_packet.data);
 		}
@@ -572,7 +579,7 @@ void Shuffle(char* str)
 	{
 		n--;
 		// random num between 0 and n-1
-		int k = (int)rnd_next_range(rnd, 0, 25);
+		int k = (int)rnd_next_range(rnd, 0, n-1);
 
 		// swap with k with n
 		char value = str[k];
@@ -594,12 +601,12 @@ void init_game()
 	//A - 9, B - 2, C - 2, D - 4, E - 12, F - 2, G - 3, H - 2, I - 9, J - 1, K - 1,
 	//L - 4, M - 2, N - 6, O - 8, P - 2, Q - 1, R - 6, S - 4, T - 6, U - 4, V - 2,
 	//W - 2, X - 1, Y - 2, Z - 1
-	const char* letter_distr = "AAAAAAAAABBCCDDDDEEEEEEEEEEEEFFGGGHHIIIIIIIIIJKLLLLMMNNNNNNNOOOOOOOOPPQRRRRRRSSSSTTTTTTUUUUVVWWXYYZ";
-	for (int i = 0; i < strlen(letter_distr); i++)
+	char letter_distr[100] = "AAAAAAAAABBCCDDDDEEEEEEEEEEEEFFGGGHHIIIIIIIIIJKLLLLMMNNNNNNNOOOOOOOOPPQRRRRRRSSSSTTTTTTUUUUVVWWXYYZ";
+	Shuffle(letter_distr);
+	for (int i = 0; i < MAX_PILE_SIZE; i++)
 	{
 		pileBuf[i] = letter_distr[i];
 	}
-	Shuffle(pileBuf);
 	printf("\n%s", pileBuf);
 }
 char getPileVal(int i, int j)
@@ -668,7 +675,6 @@ int findFirstFaceupChar(char c)
 	{
 		if (pileBuf[i] == c && pileBufFlags[i] == pileTileState::faceup)
 			return i;
-
 	}
 	return -1;
 }
