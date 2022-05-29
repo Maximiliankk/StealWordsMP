@@ -10,7 +10,6 @@ using namespace cute;
 #include <cute/cute_path.h>
 #include <sokol/sokol_gfx_imgui.h>
 #include <imgui/imgui.h>
-#include <stdlib.h>     /* qsort */
 
 #define ENG_DICT_LINES 279498
 #define MAX_WORD_LEN 15
@@ -40,7 +39,8 @@ char engdict_words[ENG_DICT_LINES][MAX_DICT_WORD_LEN];
 // both client and server use these
 char pileBuf[MAX_PILE_SIZE] = { '\0' };
 int pileBufFlags[MAX_PILE_SIZE] = { 0 };
-char pileSorted[MAX_PILE_SIZE+1] = { '\0' };
+char pileSorted[MAX_PILE_SIZE + 1] = { '\0' };
+int pileSortedIndices[MAX_PILE_SIZE + 1] = { -1 };
 int pileFaceupCount = 0;
 enum pileTileState
 {
@@ -139,11 +139,15 @@ void update_letterBuf()
 }
 sprite_t* get_letter_sprite(char c)
 {
-	if(c >= 'A' && c <= 'Z') 
+	if(c >= 'A' && c <= 'Z')
+	{
 		return &letter_sprites[c - 'A'];
-
+	}
 	if(c >= 'a' && c <= 'z')
+	{
 		return &letter_sprites[c - 'a'];
+	}
+	return nullptr;
 }
 void render_string(const char* str, int spacing, v2 pos, float scale)
 {
@@ -216,16 +220,15 @@ void server_update_code(float dt)
 				int letter_index = pileBuf[i * 10 + j] - 'A';
 				letter_sprites[letter_index].transform.p.x = xoffset;
 				letter_sprites[letter_index].transform.p.y = yoffset;
-				xoffset += 64;
 				letter_sprites[letter_index].draw(batch_p);
 			}
 			else if (pileBufFlags[i * 10 + j] == pileTileState::facedown)
 			{
 				letter_back.transform.p.x = xoffset;
 				letter_back.transform.p.y = yoffset;
-				xoffset += 64;
 				letter_back.draw(batch_p);
 			}
+			xoffset += 64;
 		}
 		yoffset -= 64;
 	}
@@ -268,16 +271,15 @@ void server_update_code(float dt)
 		}
 	}
 
-	if (key_was_pressed(KEY_RETURN)) {
+	if (key_was_pressed(KEY_RETURN))
+	{
 		if (canPileSteal(letterBuf))
 		{
-			/*char* word_p = letterBuf;
-			for (int i = 0; i < strlen(letterBuf); ++i)
-			{
-				char* ch_p = strchr(pileBuf, letterBuf[i]);
-				int ch_index = ch_p - letterBuf;
-				pileBufFlags[ch_index] = pileTileState::empty;
-			}*/
+			printf("can pile steal!\n");
+		}
+		else
+		{
+			printf("cannot pile steal...\n");
 		}
 	}
 }
@@ -579,6 +581,7 @@ void init_game()
 		pileBuf[i] = '\0';
 		pileBufFlags[i] = pileTileState::facedown;
 		pileSorted[i] = '\0';
+		pileSortedIndices[i] = -1;
 	}
 
 	// common letter distribution for popular word games
@@ -608,18 +611,63 @@ int sortCharsCompare(const void* a, const void* b)
 {
 	return (*(char*)a - *(char*)b);
 }
+void swapChars(char* xp, char* yp)
+{
+	char temp = *xp;
+	*xp = *yp;
+	*yp = temp;
+}
+void swapInts(int* xp, int* yp)
+{
+	int temp = *xp;
+	*xp = *yp;
+	*yp = temp;
+}
+void selectionSort(char arr[], int arr2[], int n)
+{
+	int i, j, min_idx;
+
+	// One by one move boundary of unsorted subarray
+	for (i = 0; i < n - 1; i++) {
+
+		// Find the minimum element in unsorted array
+		min_idx = i;
+		for (j = i + 1; j < n; j++)
+			if (arr[j] < arr[min_idx])
+				min_idx = j;
+
+		// Swap the found minimum element
+		// with the first element
+		swapChars(&arr[min_idx], &arr[i]);
+		swapInts(&arr2[min_idx], &arr2[i]);
+	}
+}
 void sortPile()
 {
-	//memcpy(pileSorted, pileBuf, MAX_PILE_SIZE);
 	for (int i = 0; i < MAX_PILE_SIZE; i++)
 	{
 		if (pileBufFlags[i] == pileTileState::faceup)
+		{
 			pileSorted[i] = pileBuf[i];
+			pileSortedIndices[i] = i;
+		}
 		else
+		{
 			pileSorted[i] = '0';
+		}
 	}
-	qsort(pileSorted, MAX_PILE_SIZE, sizeof(char), sortCharsCompare);
+	selectionSort(pileSorted, pileSortedIndices, MAX_PILE_SIZE);
 	printf("sorted pile: %s\n", getSortedPile());
+}
+int findFirstFaceupChar(char c)
+{
+	for (int i = 0; i < MAX_PILE_SIZE; ++i)
+	{
+		if (pileBuf[i] == c && pileBufFlags[i] == pileTileState::faceup)
+			return i;
+
+	}
+	return -1;
 }
 bool canPileSteal(const char* str)
 {
@@ -628,7 +676,7 @@ bool canPileSteal(const char* str)
 	int wordlen = strlen(word);
 	qsort(word, wordlen, sizeof(char), sortCharsCompare);
 	char* pile = getSortedPile();
-	bool tempPileFlags[MAX_PILE_SIZE] = { false };
+	char* pile_end = pile + strlen(pile);
 
 	// for each letter in the word
 	char* word_p = word;
@@ -639,19 +687,38 @@ bool canPileSteal(const char* str)
 
 		// while the pile pointer is not null and
 		// the chars are not equal
-		while (pile != '\0' && *word_p != *pile)
+		while (pile < pile_end && *word_p != *pile)
 		{
 			pile++; // next pile char
 		}
-		word_p++; // next word char
-		pile++; // next pile char
+		if (pile < pile_end)
+		{
+			word_p++; // next word char
+			pile++; // next pile char
+		}
+		else
+		{
+			return false;
+		}
 	}
+	// set them to empty state
+	for (int i = 0; i < wordlen; ++i)
+	{
+		int index = findFirstFaceupChar(word[i]);
+		if (index >= 0)
+			pileBufFlags[index] = pileTileState::empty;
+		else
+			printf("Error, char not found in pile\n");
+	}
+	printf("\n");
+	pileFaceupCount -= wordlen;
+	sortPile();
 	return true;
 }
 int main(int argc, const char** argv)
 {
 	uint32_t app_options = CUTE_APP_OPTIONS_DEFAULT_GFX_CONTEXT | CUTE_APP_OPTIONS_WINDOW_POS_CENTERED;
-	app_make("Steal Words Multiplayer", 0, 0, 2000, 1300, app_options, argv[0]);
+	app_make("Steal Words Multiplayer", 0, 0, 1500, 800, app_options, argv[0]);
 	batch_p = sprite_get_batch();
 	batch_set_projection(batch_p, matrix_ortho_2d(1024, 768, 0, 0));
 	mount_content_folder();
