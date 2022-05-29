@@ -114,6 +114,11 @@ error_t make_test_connect_token(uint64_t unique_client_id, const char* address_a
 
 	return err;
 }
+void deleteLastTypedChar()
+{
+	if (strlen(letterBuf))
+		letterBuf[strlen(letterBuf) - 1] = '\0';
+}
 void update_letterBuf()
 {
 	int cap_diff = 'a' - 'A';
@@ -130,12 +135,7 @@ void update_letterBuf()
 		}	
 	}
 	if (key_was_pressed(KEY_BACKSPACE))
-	{
-		if(strlen(letterBuf))
-		{
-			letterBuf[strlen(letterBuf)-1] = '\0';
-		}
-	}
+		deleteLastTypedChar();
 }
 sprite_t* get_letter_sprite(char c)
 {
@@ -199,12 +199,13 @@ void server_update_code(float dt)
 {
 	static float flip_timer = 0;
 	flip_timer += dt;
-	if (flip_timer > (pileFaceupCount+1)) {
-
-		pileBufFlags[rnd_next_range(rnd, 0, 97)] = pileTileState::faceup;
+	if (flip_timer > (pileFaceupCount+1))
+	{
+		int index = rnd_next_range(rnd, 0, 97);
+		while (pileBufFlags[index] != pileTileState::facedown) { index = rnd_next_range(rnd, 0, 97); }
+		pileBufFlags[index] = pileTileState::faceup;
 		flip_timer = 0;
 		pileFaceupCount++;
-
 		sortPile();
 	}
 
@@ -271,16 +272,21 @@ void server_update_code(float dt)
 		}
 	}
 
+	// for testing on server by yourself
 	if (key_was_pressed(KEY_RETURN))
 	{
-		if (canPileSteal(letterBuf))
+		if (is_a_word(letterBuf))
 		{
-			printf("can pile steal!\n");
+			printf("%s is a word!\n", letterBuf);
+			if (canPileSteal(letterBuf))
+			{
+				printf("can pile steal!\n");
+			}
+			else
+				printf("cannot pile steal...\n");
 		}
 		else
-		{
-			printf("cannot pile steal...\n");
-		}
+			printf("%s is not a word...\n", letterBuf);
 	}
 }
 void main_loop()
@@ -548,7 +554,7 @@ bool is_a_word(const char* word)
 					// make sure there is a null-terminator
 					// or else it might be just the first part
 					// of a word
-					return engdict_words[i][j+1] == '\0';
+					return engdict_words[i][j+1] == '\t';
 				}
 			}
 			else
@@ -595,9 +601,6 @@ void init_game()
 	}
 	Shuffle(pileBuf);
 	printf("\n%s", pileBuf);
-
-	is_a_word("AA");
-
 }
 char getPileVal(int i, int j)
 {
@@ -711,6 +714,7 @@ bool canPileSteal(const char* str)
 			printf("Error, char not found in pile\n");
 	}
 	printf("\n");
+	for (int i = 0; i < wordlen; ++i) deleteLastTypedChar();
 	pileFaceupCount -= wordlen;
 	sortPile();
 	return true;
