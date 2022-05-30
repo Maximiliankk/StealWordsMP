@@ -14,7 +14,7 @@ using namespace cute;
 #define ENG_DICT_LINES 279498
 #define MAX_WORD_LEN 15
 #define MAX_DICT_WORD_LEN 20
-#define PILE_DIM 4
+#define PILE_DIM 6
 #define MAX_PILE_SIZE PILE_DIM*PILE_DIM
 
 /*************************************************************************************************/
@@ -29,18 +29,14 @@ sprite_t letter_back;
 
 rnd_t rnd;
 
-dictionary<string_t, array<string_t>> fastDict;
+//dictionary<string_t, array<string_t>> fastDict;
 char engdict_words[ENG_DICT_LINES][MAX_DICT_WORD_LEN];
-//hashtable_t engdict_words;
-
-//#define CLIENT
-//#define SERVER
 
 // both client and server use these
-char pileBuf[MAX_PILE_SIZE] = { '\0' };
-int pileBufFlags[MAX_PILE_SIZE] = { 0 };
-char pileSorted[MAX_PILE_SIZE + 1] = { '\0' };
-int pileSortedIndices[MAX_PILE_SIZE + 1] = { -1 };
+char pileBuf[MAX_PILE_SIZE];
+char pileBufFlags[MAX_PILE_SIZE];
+char pileSorted[MAX_PILE_SIZE + 1];
+int pileFacedownIndices[MAX_PILE_SIZE];
 int pileFaceupCount = 0;
 enum pileTileState
 {
@@ -49,17 +45,19 @@ enum pileTileState
 	faceup
 };
 
-//#ifdef CLIENT
 client_t* client_p;
 uint32_t client_id;
 
-// letters typed by a player
 char letterBuf[MAX_WORD_LEN+1] = {0};
-//#endif
 
-//#ifdef SERVER
 server_t* server;
-//#endif
+
+struct server_update_clients_packet
+{
+	char pileBuf[MAX_PILE_SIZE];
+	char pileBufFlags[MAX_PILE_SIZE];
+	//char player_words[MAX_PILE_SIZE * 2];
+};
 
 // Embedded g_public_key
 int g_public_key_sz = 32;
@@ -166,58 +164,14 @@ void render_string(const char* str, int spacing, v2 pos, float scale)
 		spr->scale.y = 1;
 	}
 }
-void client_update_code(float dt)
-{	
-	uint64_t unix_time = unix_timestamp();
-
-	client_update(client_p, dt, unix_time);
-
-	if (client_state_get(client_p) == CLIENT_STATE_CONNECTED) {
-		static bool notify = false;
-		if (!notify) {
-			notify = true;
-			printf("Connected! Press ESC to gracefully disconnect.\n");
-		}
-
-		if (key_was_pressed(KEY_RETURN)) {
-			char data[50];
-			strcpy(data,"kp:enter:");
-			strcat(data, letterBuf);
-			int size = (int)strlen(data) + 1;
-			client_send(client_p, data, size, false);
-		}
-		if (key_was_pressed(KEY_ESCAPE)) {
-			client_disconnect(client_p);
-			app_stop_running();
-		}
-	} else if (client_state_get(client_p) < 0) {
-		printf("Client encountered an error: %s.\n", client_state_string(client_state_get(client_p)));
-		exit(-1);
-	}
-}
-void server_update_code(float dt)
+void RemoveFacedownIndex(int index)
 {
-	static float flip_timer = 0;
-	flip_timer += dt;
-	if (flip_timer > (pileFaceupCount+1))
-	{
-		if (pileFaceupCount == MAX_PILE_SIZE)
-		{
-			printf("\nGG! Game is done!\n");
-		}
-		else
-		{
-			int index = rnd_next_range(rnd, 0, MAX_PILE_SIZE - 1);
-			while (pileBufFlags[index] != pileTileState::facedown) { index = rnd_next_range(rnd, 0, MAX_PILE_SIZE - 1); }
-			pileBufFlags[index] = pileTileState::faceup;
-			flip_timer = 0;
-			pileFaceupCount++;
-			sortPile();
-		}
-	}
-
-	// render the pile
-	float yoffset =  5 * 64 + 20;
+	for (int i = index; i < MAX_PILE_SIZE-1; i++)
+		pileFacedownIndices[index] = pileFacedownIndices[index+1];
+}
+void render_pile()
+{
+	float yoffset = 5 * 64 + 20;
 	for (int i = 0; i < PILE_DIM; i++)
 	{
 		float xoffset = -7 * 64 - 25;
@@ -240,6 +194,85 @@ void server_update_code(float dt)
 		}
 		yoffset -= 64;
 	}
+}
+void client_update_code(float dt)
+{	
+	uint64_t unix_time = unix_timestamp();
+
+	render_pile();
+
+	client_update(client_p, dt, unix_time);
+
+	if (client_state_get(client_p) == CLIENT_STATE_CONNECTED) {
+		
+		static float client_update_pkt_timer = 0;
+		client_update_pkt_timer += dt;
+		if (client_update_pkt_timer > 1)
+		{
+			printf("Sending empty packet to server\n");
+			char data = 'a';
+			client_send(client_p, (void*)&data, 1, false);
+			//client_send(client_p, nullptr, 0, false);
+			client_update_pkt_timer = 0;
+		}
+
+		static bool notify = false;
+		if (!notify) {
+			notify = true;
+			printf("Connected! Press ESC to gracefully disconnect.\n");
+		}
+
+		if (key_was_pressed(KEY_RETURN)) {
+			char data[50];
+			strcpy(data,"kp:enter:");
+			strcat(data, letterBuf);
+			int size = (int)strlen(data) + 1;
+			client_send(client_p, data, size, true);
+		}
+		if (key_was_pressed(KEY_ESCAPE)) {
+			client_disconnect(client_p);
+			app_stop_running();
+		}
+
+		void* p_data;
+		int size;
+		while (client_pop_packet(client_p, &p_data, &size))
+		{
+			printf("Got a packet from server!\n");
+			server_update_clients_packet sucp;
+			memcpy(&sucp, p_data, size);
+			memcpy(pileBuf, sucp.pileBuf, MAX_PILE_SIZE);
+			memcpy(pileBufFlags, sucp.pileBufFlags, MAX_PILE_SIZE);
+			client_free_packet(client_p, p_data);
+		}
+
+	} else if (client_state_get(client_p) < 0) {
+		printf("Client encountered an error: %s.\n", client_state_string(client_state_get(client_p)));
+		exit(-1);
+	}
+}
+void server_update_code(float dt)
+{
+	static float flip_timer = 0;
+	flip_timer += dt;
+	if (flip_timer > (pileFaceupCount+1))
+	{
+		if (pileFaceupCount < MAX_PILE_SIZE)
+		{
+			pileFaceupCount++;
+			int index = pileFacedownIndices[rnd_next_range(rnd, 0, MAX_PILE_SIZE - pileFaceupCount)];
+			// need to choose a random tile to flip from only the ones that are faceup already
+			//while (pileBufFlags[index] != pileTileState::facedown) { index = rnd_next_range(rnd, 0, MAX_PILE_SIZE - 1); }
+			RemoveFacedownIndex(index);
+			pileBufFlags[index] = pileTileState::faceup;
+			flip_timer = 0;
+			sortPile();
+		}
+		else
+			printf("\nGG! Game is done!\n");
+	}
+
+	render_pile();
 
 	// each player
 	render_string("PLAYERONE"  , letter_sprites[0].w / 4, v2(4 * 64, 11 * 32), 0.3);
@@ -252,6 +285,18 @@ void server_update_code(float dt)
 	uint64_t unix_time = unix_timestamp();
 
 	server_update(server, dt, unix_time);
+
+	static float send_update_pkt_timer = 0;
+	send_update_pkt_timer += dt;
+	if (send_update_pkt_timer > 1)
+	{
+		printf("Sending board to client!\n");
+		server_update_clients_packet sucp;
+		memcpy(sucp.pileBuf, pileBuf, MAX_PILE_SIZE);
+		memcpy(sucp.pileBufFlags, pileBufFlags, MAX_PILE_SIZE);
+		server_send_to_all_clients(server, &sucp, sizeof(sucp), true);
+		send_update_pkt_timer = 0;
+	}
 
 	server_event_t e;
 	while (server_pop_event(server, &e)) {
@@ -268,7 +313,14 @@ void server_update_code(float dt)
 				const char* word = (const char*)e.u.payload_packet.data + msg_header_len; // skip the header
 				printf("A player is trying to make word: %s\n", word);
 				if (is_a_word(word))
-					printf("It is a word!\n");
+				{
+					if (canPileSteal(word))
+					{
+						printf("can pile steal!\n");
+					}
+					else
+						printf("cannot pile steal...\n");
+				}
 				else
 					printf("It is not a word...\n");
 			}
@@ -434,67 +486,67 @@ void load_eng_dict()
 }
 void load_sorted_word_list(uint32_t n)
 {
-	const char* filedata;
-	char filepath[100] = "wordlists/";
-	char onedigit[2];
-	onedigit[0] = (n < 10) ? ('0'+n) : ('0');
-	onedigit[1] = '\0';
-	char twodigits[3];
-	twodigits[0] = (n < 10) ? ('0') : ('0'+(n/10));
-	twodigits[1] = (n < 10) ? ('0') : ('0'+(n%10));
-	twodigits[2] = '\0';
-	//printf("\nonedigit:  %s", onedigit);
-	//printf("\ntwodigits: %s", twodigits);
+	//const char* filedata;
+	//char filepath[100] = "wordlists/";
+	//char onedigit[2];
+	//onedigit[0] = (n < 10) ? ('0'+n) : ('0');
+	//onedigit[1] = '\0';
+	//char twodigits[3];
+	//twodigits[0] = (n < 10) ? ('0') : ('0'+(n/10));
+	//twodigits[1] = (n < 10) ? ('0') : ('0'+(n%10));
+	//twodigits[2] = '\0';
+	////printf("\nonedigit:  %s", onedigit);
+	////printf("\ntwodigits: %s", twodigits);
 
+	////printf("\nfilepath: %s", filepath);
+	//strcat(filepath, (n < 10) ? onedigit : twodigits);
+	////printf("\nfilepath: %s", filepath);
+	//strcat(filepath, "sort.txt");
+	//
 	//printf("\nfilepath: %s", filepath);
-	strcat(filepath, (n < 10) ? onedigit : twodigits);
-	//printf("\nfilepath: %s", filepath);
-	strcat(filepath, "sort.txt");
-	
-	printf("\nfilepath: %s", filepath);
 
-	size_t filesize = 0;
-	file_system_read_entire_file_to_memory_and_nul_terminate(
-		filepath,
-		(void**)&filedata,
-		&filesize
-		);
-	
-	printf("\nfilesize: %d", (int)filesize);
+	//size_t filesize = 0;
+	//file_system_read_entire_file_to_memory_and_nul_terminate(
+	//	filepath,
+	//	(void**)&filedata,
+	//	&filesize
+	//	);
+	//
+	//printf("\nfilesize: %d", (int)filesize);
 
-	const char* cur = filedata;
-	const char* end = filedata + filesize;
-	while(cur < end)
-	{
-		array<string_t>* arr = nullptr;
-		
-		string_t tempkey = string_t(cur, cur + n);
-		cur += n;
-		printf("\n1tempkey:%s\n", tempkey.c_str());
-		tempkey.incref();
+	//const char* cur = filedata;
+	//const char* end = filedata + filesize;
+	//while(cur < end)
+	//{
+	//	array<string_t>* arr = nullptr;
+	//	
+	//	string_t tempkey = string_t(cur, cur + n);
+	//	cur += n;
+	//	printf("\n1tempkey:%s\n", tempkey.c_str());
+	//	tempkey.incref();
 
-		cur++; // comma skip
+	//	cur++; // comma skip
 
-		string_t tempvalue = string_t(cur, cur + n);
-		cur += n + 2;
-		printf("\n2tempvalue:%s", tempvalue.c_str());
-		tempvalue.incref();
+	//	string_t tempvalue = string_t(cur, cur + n);
+	//	cur += n + 2;
+	//	printf("\n2tempvalue:%s", tempvalue.c_str());
+	//	tempvalue.incref();
 
-		arr = fastDict.find(tempkey);
-		if(!arr)
-		{
-			int temp = fastDict.count();
-			printf("\ninserting key #%d", temp);
-			fastDict.insert(tempkey, {tempvalue});
-		}
-		else
-		{
-			printf("\nadding...");
-			arr->add(tempvalue);
-		}
-	}
+	//	arr = fastDict.find(tempkey);
+	//	if(!arr)
+	//	{
+	//		int temp = fastDict.count();
+	//		printf("\ninserting key #%d", temp);
+	//		fastDict.insert(tempkey, {tempvalue});
+	//	}
+	//	else
+	//	{
+	//		printf("\nadding...");
+	//		arr->add(tempvalue);
+	//	}
+	//}
 
-	printf("\nfastDict count: %d\n",fastDict.count());
+	//printf("\nfastDict count: %d\n",fastDict.count());
 	//printf("key: %s", fastDict.keys()[0].c_str());
 	
 	// for(int i=0;i<fastDict.count();i++)
@@ -592,9 +644,9 @@ void init_game()
 	for (int i = 0; i < MAX_PILE_SIZE; i++)
 	{
 		pileBuf[i] = '\0';
-		pileBufFlags[i] = pileTileState::facedown;
 		pileSorted[i] = '\0';
-		pileSortedIndices[i] = -1;
+		pileBufFlags[i] = pileTileState::facedown;
+		pileFacedownIndices[i] = i;
 	}
 
 	// common letter distribution for popular word games
@@ -627,13 +679,7 @@ void swapChars(char* xp, char* yp)
 	*xp = *yp;
 	*yp = temp;
 }
-void swapInts(int* xp, int* yp)
-{
-	int temp = *xp;
-	*xp = *yp;
-	*yp = temp;
-}
-void selectionSort(char arr[], int arr2[], int n)
+void selectionSort(char arr[], int n)
 {
 	int i, j, min_idx;
 
@@ -649,7 +695,6 @@ void selectionSort(char arr[], int arr2[], int n)
 		// Swap the found minimum element
 		// with the first element
 		swapChars(&arr[min_idx], &arr[i]);
-		swapInts(&arr2[min_idx], &arr2[i]);
 	}
 }
 void sortPile()
@@ -657,16 +702,11 @@ void sortPile()
 	for (int i = 0; i < MAX_PILE_SIZE; i++)
 	{
 		if (pileBufFlags[i] == pileTileState::faceup)
-		{
 			pileSorted[i] = pileBuf[i];
-			pileSortedIndices[i] = i;
-		}
 		else
-		{
 			pileSorted[i] = '0';
-		}
 	}
-	selectionSort(pileSorted, pileSortedIndices, MAX_PILE_SIZE);
+	selectionSort(pileSorted, MAX_PILE_SIZE);
 	printf("sorted pile: %s\n", getSortedPile());
 }
 int findFirstFaceupChar(char c)
