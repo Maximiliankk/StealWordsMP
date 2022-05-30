@@ -1,6 +1,3 @@
-/*************************************************************************************************/
-// Preprocessor
-/*************************************************************************************************/
 #define _CRT_SECURE_NO_WARNINGS
 #define _CRT_SECURE_NO_DEPRECATE
 #include <time.h>
@@ -10,62 +7,52 @@ using namespace cute;
 #include <cute/cute_path.h>
 #include <sokol/sokol_gfx_imgui.h>
 #include <imgui/imgui.h>
-
 #define ENG_DICT_LINES 279498
+#define MAX_PLAYERS 10
+#define MAX_WORDS_PER_PLAYER 10
+#define MIN_WORD_LEN 4
 #define MAX_WORD_LEN 15
 #define MAX_DICT_WORD_LEN 20
 #define PILE_DIM 6
 #define MAX_PILE_SIZE PILE_DIM*PILE_DIM
-
-/*************************************************************************************************/
-// Global data
-/*************************************************************************************************/
-uint16_t port = 5001;
-uint64_t appID = 234;
-
-batch_t* batch_p;
-sprite_t letter_sprites[26];
-sprite_t letter_back;
-
-rnd_t rnd;
-
-//dictionary<string_t, array<string_t>> fastDict;
-char engdict_words[ENG_DICT_LINES][MAX_DICT_WORD_LEN];
-
-// both client and server use these
-char pileBuf[MAX_PILE_SIZE];
-char pileBufFlags[MAX_PILE_SIZE];
-char pileSorted[MAX_PILE_SIZE + 1];
-int pileFacedownIndices[MAX_PILE_SIZE];
-int pileFaceupCount = 0;
 enum pileTileState
 {
 	empty,
 	facedown,
 	faceup
 };
-
-client_t* client_p;
-uint32_t client_id;
-
-char letterBuf[MAX_WORD_LEN+1] = {0};
-
-server_t* server;
-
+char pileBuf[MAX_PILE_SIZE];
+char pileBufFlags[MAX_PILE_SIZE];
+char playerNumWords[MAX_PLAYERS];
+char playerWords[MAX_PLAYERS][MAX_WORDS_PER_PLAYER][MAX_WORD_LEN];
+char numActivePlayers = 1;
+char playerNames[MAX_PLAYERS][MAX_WORD_LEN];
 struct server_update_clients_packet
 {
 	char pileBuf[MAX_PILE_SIZE];
 	char pileBufFlags[MAX_PILE_SIZE];
 	//char player_words[MAX_PILE_SIZE * 2];
 };
-
-// Embedded g_public_key
+char pileSorted[MAX_PILE_SIZE + 1];
+int pileFacedownIndices[MAX_PILE_SIZE];
+int pileFaceupCount = 0;
+char letterBuf[MAX_WORD_LEN + 1] = { 0 };
+char engdict_words[ENG_DICT_LINES][MAX_DICT_WORD_LEN];
+//dictionary<string_t, array<string_t>> fastDict;
+rnd_t rnd;
+batch_t* batch_p;
+sprite_t letter_sprites[26];
+sprite_t letter_back;
+uint16_t port = 5001;
+uint64_t appID = 234;
+client_t* client_p;
+uint32_t client_id;
+server_t* server;
 int g_public_key_sz = 32;
 unsigned char g_public_key_data[32] = {
 	0x4a,0xc5,0x56,0x47,0x30,0xbf,0xdc,0x22,0xc7,0x67,0x3b,0x23,0xc5,0x00,0x21,0x7e,
 	0x19,0x3e,0xa4,0xed,0xbc,0x0f,0x87,0x98,0x80,0xac,0x89,0x82,0x30,0xe9,0x95,0x6c
 };
-// Embedded g_secret_key
 int g_secret_key_sz = 64;
 unsigned char g_secret_key_data[64] = {
 	0x10,0xaa,0x98,0xe0,0x10,0x5a,0x3e,0x63,0xe5,0xdf,0xa4,0xb5,0x5d,0xf3,0x3c,0x0a,
@@ -73,14 +60,11 @@ unsigned char g_secret_key_data[64] = {
 	0x4a,0xc5,0x56,0x47,0x30,0xbf,0xdc,0x22,0xc7,0x67,0x3b,0x23,0xc5,0x00,0x21,0x7e,
 	0x19,0x3e,0xa4,0xed,0xbc,0x0f,0x87,0x98,0x80,0xac,0x89,0x82,0x30,0xe9,0x95,0x6c
 };
-
-/*************************************************************************************************/
 uint64_t unix_timestamp();
 bool is_a_word(const char* word);
 void sortPile();
 bool canPileSteal(const char* str);
-
-/*************************************************************************************************/
+void doPileSteal(int playerID, const char* word);
 error_t make_test_connect_token(uint64_t unique_client_id, const char* address_and_port, uint8_t* connect_token_buffer)
 {
 	crypto_key_t client_to_server_key = crypto_generate_key();
@@ -164,6 +148,21 @@ void render_string(const char* str, int spacing, v2 pos, float scale)
 		spr->scale.y = 1;
 	}
 }
+void render_player_words()
+{
+	int letter_width = letter_sprites[0].w / 4;
+	v2 startCoord = v2(4 * 64, 11 * 32);
+	//for (int i = 0; i < numActivePlayers; i++)
+	for (int i = 0; i < 1; i++)
+	{
+		render_string(playerNames[i], letter_width, startCoord, 0.3);
+		for (int j = 0; j < playerNumWords[i]; j++)
+		//for (int j = 1; j <= 1; j++)
+		{
+			render_string(playerWords[i][j], letter_width, startCoord + v2(0, -letter_width * (j+1)), 0.3);
+		}
+	}
+}
 void RemoveFacedownIndex(int index)
 {
 	for (int i = index; i < MAX_PILE_SIZE-1; i++)
@@ -211,8 +210,12 @@ void client_update_code(float dt)
 		{
 			printf("Sending empty packet to server\n");
 			char data = 'a';
-			client_send(client_p, (void*)&data, 1, false);
-			//client_send(client_p, nullptr, 0, false);
+			//client_send(client_p, (void*)&data, 1, false);
+			error_t ret = client_send(client_p, nullptr, 0, false);
+			if (ret.is_error())
+			{
+				printf("ERROR: %s\n", ret.details);
+			}
 			client_update_pkt_timer = 0;
 		}
 
@@ -271,19 +274,10 @@ void server_update_code(float dt)
 		else
 			printf("\nGG! Game is done!\n");
 	}
-
 	render_pile();
-
-	// each player
-	render_string("PLAYERONE"  , letter_sprites[0].w / 4, v2(4 * 64, 11 * 32), 0.3);
-	render_string("PLAYERTWO"  , letter_sprites[0].w / 4, v2(4 * 64, 7 * 32), 0.3);
-	render_string("PLAYERTHREE", letter_sprites[0].w / 4, v2(4 * 64, 4 * 32), 0.3);
-	render_string("PLAYERFOUR" , letter_sprites[0].w / 4, v2(4 * 64, 1 * 32), 0.3);
-
+	render_player_words();
 	batch_flush(batch_p);
-
 	uint64_t unix_time = unix_timestamp();
-
 	server_update(server, dt, unix_time);
 
 	static float send_update_pkt_timer = 0;
@@ -297,7 +291,6 @@ void server_update_code(float dt)
 		server_send_to_all_clients(server, &sucp, sizeof(sucp), true);
 		send_update_pkt_timer = 0;
 	}
-
 	server_event_t e;
 	while (server_pop_event(server, &e)) {
 		if (e.type == SERVER_EVENT_TYPE_NEW_CONNECTION) {
@@ -340,6 +333,7 @@ void server_update_code(float dt)
 			if (canPileSteal(letterBuf))
 			{
 				printf("can pile steal!\n");
+				doPileSteal(0, letterBuf);
 			}
 			else
 				printf("cannot pile steal...\n");
@@ -648,7 +642,48 @@ void init_game()
 		pileBufFlags[i] = pileTileState::facedown;
 		pileFacedownIndices[i] = i;
 	}
+	const char pnames[MAX_PLAYERS][MAX_WORD_LEN] =
+	{
+		{ "PLAYERONE" },
+		{ "PLAYERTWO" },
+		{ "PLAYERTHREE" },
+		{ "PLAYERFOUR" },
+		{ "PLAYERFIVE" },
+		{ "PLAYERSIX" },
+		{ "PLAYERSEVEN" },
+		{ "PLAYEREIGHT" },
+		{ "PLAYERNINE" },
+		{ "PLAYERTEN" }
+	};
+	const char testwords[MAX_WORDS_PER_PLAYER][MAX_WORD_LEN] =
+	{
+		{ "ABCD" },
+		{ "APPLE" },
+		{ "BANANA" },
+		{ "LASKDJF" },
+		{ "LSKDFJAKSDF" },
+		{ "ASDJFSAFJASDFH" },
+		{ "ASDJFSAFJASDF" },
+		{ "ASDJFSAFJASD" },
+		{ "ASDJFSAFJAS" },
+		{ "ASDJFSAFJA" }
+	};
+	for (int i = 0; i < MAX_PLAYERS; i++)
+	{
+		for (int j = 0; j < MAX_WORDS_PER_PLAYER; j++)
+			for (int k = 0; k < MAX_WORD_LEN; k++)
+				playerWords[i][j][k] = '\0';
 
+		for (int k = 0; k < MAX_WORD_LEN; k++)
+			playerNames[i][k] = pnames[i][k];
+
+		playerNumWords[i] = 0;
+	}
+	// TEST
+	playerNumWords[0] = 10;
+	for (int j = 0; j < MAX_WORDS_PER_PLAYER; j++)
+		for (int k = 0; k < MAX_WORD_LEN; k++)
+			playerWords[0][j][k] = testwords[j][k];
 	// common letter distribution for popular word games
 	//A - 9, B - 2, C - 2, D - 4, E - 12, F - 2, G - 3, H - 2, I - 9, J - 1, K - 1,
 	//L - 4, M - 2, N - 6, O - 8, P - 2, Q - 1, R - 6, S - 4, T - 6, U - 4, V - 2,
@@ -718,6 +753,27 @@ int findFirstFaceupChar(char c)
 	}
 	return -1;
 }
+void doPileSteal(int playerID, const char* word)
+{
+
+	int wordlen = strlen(word);
+	for (int i = 0; i < wordlen; ++i)
+	{
+		int index = findFirstFaceupChar(word[i]);
+		if (index >= 0)
+		{
+			playerWords[playerID][playerNumWords[playerID]][i] = word[i];
+			pileBufFlags[index] = pileTileState::empty;
+		}			
+		else
+			printf("Error, char not found in pile\n");
+	}
+	playerNumWords[playerID]++;
+	printf("\n");
+	for (int i = 0; i < wordlen; ++i) deleteLastTypedChar(); // for server testing
+	pileFaceupCount -= wordlen;
+	sortPile();
+}
 bool canPileSteal(const char* str)
 {
 	char word[MAX_WORD_LEN+1] = {'\0'};
@@ -750,19 +806,7 @@ bool canPileSteal(const char* str)
 			return false;
 		}
 	}
-	// set them to empty state
-	for (int i = 0; i < wordlen; ++i)
-	{
-		int index = findFirstFaceupChar(word[i]);
-		if (index >= 0)
-			pileBufFlags[index] = pileTileState::empty;
-		else
-			printf("Error, char not found in pile\n");
-	}
-	printf("\n");
-	for (int i = 0; i < wordlen; ++i) deleteLastTypedChar();
-	pileFaceupCount -= wordlen;
-	sortPile();
+	
 	return true;
 }
 int main(int argc, const char** argv)
