@@ -7,14 +7,17 @@ using namespace cute;
 #include <cute/cute_path.h>
 #include <sokol/sokol_gfx_imgui.h>
 #include <imgui/imgui.h>
+#define WINDOW_WIDTH 1900
+#define WINDOW_HEIGHT 1200
 #define ENG_DICT_LINES 279498
-#define MAX_PLAYERS 10
+#define MAX_PLAYERS 8
 #define MAX_WORDS_PER_PLAYER 10
 #define MIN_WORD_LEN 4
 #define MAX_WORD_LEN 15
 #define MAX_DICT_WORD_LEN 20
-#define PILE_DIM 6
+#define PILE_DIM 10
 #define MAX_PILE_SIZE PILE_DIM*PILE_DIM
+#define TEST_DATA true
 enum pileTileState
 {
 	empty,
@@ -25,7 +28,7 @@ char pileBuf[MAX_PILE_SIZE];
 char pileBufFlags[MAX_PILE_SIZE];
 char playerNumWords[MAX_PLAYERS];
 char playerWords[MAX_PLAYERS][MAX_WORDS_PER_PLAYER][MAX_WORD_LEN];
-char numActivePlayers = 1;
+char numActivePlayers = 8;
 char playerNames[MAX_PLAYERS][MAX_WORD_LEN];
 struct server_update_clients_packet
 {
@@ -117,7 +120,11 @@ void update_letterBuf()
 		}	
 	}
 	if (key_was_pressed(KEY_BACKSPACE))
-		deleteLastTypedChar();
+	{
+		int len = strlen(letterBuf);
+		for (int i = 0; i < len; ++i)
+			deleteLastTypedChar();
+	}
 }
 sprite_t* get_letter_sprite(char c)
 {
@@ -135,7 +142,8 @@ void render_string(const char* str, int spacing, v2 pos, float scale)
 {
 	float xoffs = pos.x;
 	float yoffs = pos.y;
-	for (int i = 0; i < strlen(str); i++)
+	int len = strlen(str);
+	for (int i = 0; i < len; i++)
 	{
 		sprite_t* spr = get_letter_sprite(str[i]);
 		spr->transform.p.x = xoffs;
@@ -150,16 +158,36 @@ void render_string(const char* str, int spacing, v2 pos, float scale)
 }
 void render_player_words()
 {
-	int letter_width = letter_sprites[0].w / 4;
-	v2 startCoord = v2(4 * 64, 11 * 32);
-	//for (int i = 0; i < numActivePlayers; i++)
-	for (int i = 0; i < 1; i++)
+	float player_data_spacing = 2.8;
+	float halfw = (float)WINDOW_WIDTH / player_data_spacing, halfh = (float)WINDOW_HEIGHT / player_data_spacing;
+	float smallhalf = halfw > halfh ? halfh : halfw;
+	v2 pstart_pos[8] = {
+		v2(-smallhalf, smallhalf),
+		v2(smallhalf, smallhalf),
+		v2(-smallhalf,-smallhalf),
+		v2( smallhalf,-smallhalf),
+
+		v2(-smallhalf, 0),
+		v2( smallhalf, 0),
+		v2( 0,         smallhalf),
+		v2( 0,        -smallhalf),
+	};
+
+	float letter_scale = 0.45;
+	int letter_width = (int)((float)letter_sprites[0].w / 2.5);
+	v2 half_letterw(-letter_width/2, letter_width / 2);
+	for (int i = 0; i < numActivePlayers; i++)
 	{
-		render_string(playerNames[i], letter_width, startCoord, 0.3);
+		int pname_len = strlen(playerNames[i]) / 2;
+		v2 half_max_words(0, MAX_WORDS_PER_PLAYER / 2 * letter_width);
+		v2 half_player_name(pname_len * letter_width, 0);
+		render_string(playerNames[i], letter_width, pstart_pos[i] + half_letterw + half_max_words - half_player_name, letter_scale);
 		for (int j = 0; j < playerNumWords[i]; j++)
-		//for (int j = 1; j <= 1; j++)
 		{
-			render_string(playerWords[i][j], letter_width, startCoord + v2(0, -letter_width * (j+1)), 0.3);
+			int pword_len = strlen(playerWords[i][j]) / 2;
+			v2 word_row(0, -letter_width * (j + 1));
+			v2 half_word(pword_len * letter_width, 0);
+			render_string(playerWords[i][j], letter_width, pstart_pos[i] + half_letterw + half_max_words + word_row - half_word, letter_scale);
 		}
 	}
 }
@@ -170,28 +198,33 @@ void RemoveFacedownIndex(int index)
 }
 void render_pile()
 {
-	float yoffset = 5 * 64 + 20;
+	float letterscale = 0.7;
+	int tilewidth = letter_sprites[0].w * letterscale;
+	v2 pos(-PILE_DIM * tilewidth / 2,
+		    PILE_DIM * tilewidth / 2);
+	float xstart = pos.x;
+
 	for (int i = 0; i < PILE_DIM; i++)
 	{
-		float xoffset = -7 * 64 - 25;
+		pos.x = xstart;
 		for (int j = 0; j < PILE_DIM; j++)
 		{
 			if (pileBufFlags[i * PILE_DIM + j] == pileTileState::faceup)
 			{
 				int letter_index = pileBuf[i * PILE_DIM + j] - 'A';
-				letter_sprites[letter_index].transform.p.x = xoffset;
-				letter_sprites[letter_index].transform.p.y = yoffset;
+				letter_sprites[letter_index].scale = v2(letterscale, letterscale);
+				letter_sprites[letter_index].transform.p = pos;
 				letter_sprites[letter_index].draw(batch_p);
 			}
 			else if (pileBufFlags[i * PILE_DIM + j] == pileTileState::facedown)
 			{
-				letter_back.transform.p.x = xoffset;
-				letter_back.transform.p.y = yoffset;
+				letter_back.scale = v2(letterscale, letterscale);
+				letter_back.transform.p = pos;
 				letter_back.draw(batch_p);
 			}
-			xoffset += 64;
+			pos.x += tilewidth;
 		}
-		yoffset -= 64;
+		pos.y -= tilewidth;
 	}
 }
 void client_update_code(float dt)
@@ -297,19 +330,21 @@ void server_update_code(float dt)
 			printf("New connection from id %d, on index %d.\n", (int)e.u.new_connection.client_id, e.u.new_connection.client_index);
 		}
 		else if (e.type == SERVER_EVENT_TYPE_PAYLOAD_PACKET) {
+			int c_idx = (int)e.u.payload_packet.client_index;
 			const char* msg = (const char*)e.u.payload_packet.data;
-			printf("Got a message from client on index %d, \"%s\"\n", e.u.payload_packet.client_index, msg);
+			printf("Got a message from client on index %d, \"%s\"\n", c_idx, msg);
 			const char* msg_header = "kp:enter:";
 			const int msg_header_len = strlen(msg_header);
 			if (strcmp(msg, msg_header))
 			{
-				const char* word = (const char*)e.u.payload_packet.data + msg_header_len; // skip the header
+				const char* word = msg + msg_header_len; // skip the header
 				printf("A player is trying to make word: %s\n", word);
 				if (is_a_word(word))
 				{
 					if (canPileSteal(word))
 					{
 						printf("can pile steal!\n");
+						doPileSteal(c_idx, letterBuf);
 					}
 					else
 						printf("cannot pile steal...\n");
@@ -342,6 +377,15 @@ void server_update_code(float dt)
 			printf("%s is not a word...\n", letterBuf);
 	}
 }
+void render_typing()
+{
+	update_letterBuf();
+	float letterscale = 0.7;
+	int tilewidth = letter_sprites[0].w * letterscale;
+	v2 pos(- (float)strlen(letterBuf) / 2.0 * (float)tilewidth,
+		PILE_DIM * tilewidth - 170);
+	render_string(letterBuf, tilewidth, pos, letterscale);
+}
 void main_loop()
 {
 	while (app_is_running())
@@ -349,17 +393,7 @@ void main_loop()
 		float dt = calc_dt();
 		app_update(dt);
 
-		// typing
-		update_letterBuf();
-		float offset = -7 * 64;
-		for (int i = 0; i < strlen(letterBuf); i++)
-		{
-			int letter_index = letterBuf[i] - 'A';
-			letter_sprites[letter_index].transform.p.x = offset;
-			letter_sprites[letter_index].transform.p.y = -300;
-			offset += 64;
-			letter_sprites[letter_index].draw(batch_p);
-		}
+		render_typing();
 
 		batch_flush(batch_p);
 
@@ -651,9 +685,7 @@ void init_game()
 		{ "PLAYERFIVE" },
 		{ "PLAYERSIX" },
 		{ "PLAYERSEVEN" },
-		{ "PLAYEREIGHT" },
-		{ "PLAYERNINE" },
-		{ "PLAYERTEN" }
+		{ "PLAYEREIGHT" }
 	};
 	const char testwords[MAX_WORDS_PER_PLAYER][MAX_WORD_LEN] =
 	{
@@ -679,22 +711,30 @@ void init_game()
 
 		playerNumWords[i] = 0;
 	}
-	// TEST
-	playerNumWords[0] = 10;
-	for (int j = 0; j < MAX_WORDS_PER_PLAYER; j++)
-		for (int k = 0; k < MAX_WORD_LEN; k++)
-			playerWords[0][j][k] = testwords[j][k];
+	if (TEST_DATA)
+	{
+		// TEST
+		for (int i = 0; i < MAX_PLAYERS; i++)
+		{
+			playerNumWords[i] = 10;
+			for (int j = 0; j < MAX_WORDS_PER_PLAYER; j++)
+				for (int k = 0; k < MAX_WORD_LEN; k++)
+					playerWords[i][j][k] = testwords[j][k];
+		}
+	}
 	// common letter distribution for popular word games
 	//A - 9, B - 2, C - 2, D - 4, E - 12, F - 2, G - 3, H - 2, I - 9, J - 1, K - 1,
 	//L - 4, M - 2, N - 6, O - 8, P - 2, Q - 1, R - 6, S - 4, T - 6, U - 4, V - 2,
 	//W - 2, X - 1, Y - 2, Z - 1
 	char letter_distr[100] = "AAAAAAAAABBCCDDDDEEEEEEEEEEEEFFGGGHHIIIIIIIIIJKLLLLMMNNNNNNNOOOOOOOOPPQRRRRRRSSSSTTTTTTUUUUVVWWXYYZ";
 	Shuffle(letter_distr);
-	for (int i = 0; i < MAX_PILE_SIZE; i++)
+	printf("\nDistribution: ");
+	int len = strlen(letter_distr);
+	for (int i = 0; i < len; i++)
 	{
 		pileBuf[i] = letter_distr[i];
+		printf("%c", pileBuf[i]);
 	}
-	printf("\n%s", pileBuf);
 }
 char getPileVal(int i, int j)
 {
@@ -755,7 +795,6 @@ int findFirstFaceupChar(char c)
 }
 void doPileSteal(int playerID, const char* word)
 {
-
 	int wordlen = strlen(word);
 	for (int i = 0; i < wordlen; ++i)
 	{
@@ -812,9 +851,9 @@ bool canPileSteal(const char* str)
 int main(int argc, const char** argv)
 {
 	uint32_t app_options = CUTE_APP_OPTIONS_DEFAULT_GFX_CONTEXT | CUTE_APP_OPTIONS_WINDOW_POS_CENTERED;
-	app_make("Steal Words Multiplayer", 0, 0, 1500, 800, app_options, argv[0]);
+	app_make("Steal Words Multiplayer", 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT, app_options, argv[0]);
 	batch_p = sprite_get_batch();
-	batch_set_projection(batch_p, matrix_ortho_2d(1024, 768, 0, 0));
+	batch_set_projection(batch_p, matrix_ortho_2d(WINDOW_WIDTH, WINDOW_HEIGHT, 0, 0));
 	mount_content_folder();
 	rnd = rnd_seed((uint64_t)time(0));
 
