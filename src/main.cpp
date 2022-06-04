@@ -27,9 +27,9 @@ enum pileTileState
 char pileBuf[MAX_PILE_SIZE];
 char pileBufFlags[MAX_PILE_SIZE];
 char playerNumWords[MAX_PLAYERS];
-char playerWords[MAX_PLAYERS][MAX_WORDS_PER_PLAYER][MAX_WORD_LEN];
+char playerWords[MAX_PLAYERS][MAX_WORDS_PER_PLAYER][MAX_WORD_LEN+1];
 char numActivePlayers = 8;
-char playerNames[MAX_PLAYERS][MAX_WORD_LEN];
+char playerNames[MAX_PLAYERS][MAX_WORD_LEN+1];
 struct server_update_clients_packet
 {
 	char pileBuf[MAX_PILE_SIZE];
@@ -39,7 +39,7 @@ struct server_update_clients_packet
 char pileSorted[MAX_PILE_SIZE + 1];
 int pileFacedownIndices[MAX_PILE_SIZE];
 int pileFaceupCount = 0;
-char letterBuf[MAX_WORD_LEN + 1] = { 0 };
+char letterBuf[MAX_WORD_LEN+1] = { 0 };
 char engdict_words[ENG_DICT_LINES][MAX_DICT_WORD_LEN];
 //dictionary<string_t, array<string_t>> fastDict;
 rnd_t rnd;
@@ -68,6 +68,7 @@ bool is_a_word(const char* word);
 void sortPile();
 bool canPileSteal(const char* str);
 void doPileSteal(int playerID, const char* word);
+void tryAnagramSteal(const char* str, int playerID);
 error_t make_test_connect_token(uint64_t unique_client_id, const char* address_and_port, uint8_t* connect_token_buffer)
 {
 	crypto_key_t client_to_server_key = crypto_generate_key();
@@ -347,7 +348,10 @@ void server_update_code(float dt)
 						doPileSteal(c_idx, letterBuf);
 					}
 					else
+					{
+						tryAnagramSteal(word, c_idx);
 						printf("cannot pile steal...\n");
+					}
 				}
 				else
 					printf("It is not a word...\n");
@@ -371,7 +375,10 @@ void server_update_code(float dt)
 				doPileSteal(0, letterBuf);
 			}
 			else
+			{
+				tryAnagramSteal(letterBuf, 0);
 				printf("cannot pile steal...\n");
+			}
 		}
 		else
 			printf("%s is not a word...\n", letterBuf);
@@ -689,9 +696,9 @@ void init_game()
 	};
 	const char testwords[MAX_WORDS_PER_PLAYER][MAX_WORD_LEN] =
 	{
-		{ "ABCD" },
+		{ "DOG" },
 		{ "APPLE" },
-		{ "BANANA" },
+		{ "TEAM" },
 		{ "LASKDJF" },
 		{ "LSKDFJAKSDF" },
 		{ "ASDJFSAFJASDFH" },
@@ -703,8 +710,11 @@ void init_game()
 	for (int i = 0; i < MAX_PLAYERS; i++)
 	{
 		for (int j = 0; j < MAX_WORDS_PER_PLAYER; j++)
-			for (int k = 0; k < MAX_WORD_LEN; k++)
+			for (int k = 0; k < MAX_WORD_LEN + 1; k++)
+			{
 				playerWords[i][j][k] = '\0';
+				playerNames[i][k] = '\0';
+			}
 
 		for (int k = 0; k < MAX_WORD_LEN; k++)
 			playerNames[i][k] = pnames[i][k];
@@ -716,10 +726,14 @@ void init_game()
 		// TEST
 		for (int i = 0; i < MAX_PLAYERS; i++)
 		{
-			playerNumWords[i] = 10;
-			for (int j = 0; j < MAX_WORDS_PER_PLAYER; j++)
+			for (int j = 0; j < MAX_WORDS_PER_PLAYER - 3; j++)
+			{
 				for (int k = 0; k < MAX_WORD_LEN; k++)
 					playerWords[i][j][k] = testwords[j][k];
+
+				playerNumWords[i]++;
+			}
+
 		}
 	}
 	// common letter distribution for popular word games
@@ -795,6 +809,12 @@ int findFirstFaceupChar(char c)
 }
 void doPileSteal(int playerID, const char* word)
 {
+	if (playerNumWords[playerID] >= MAX_WORDS_PER_PLAYER)
+	{
+		printf("This player already has the maximum number of words!\n");
+		return;
+	}
+
 	int wordlen = strlen(word);
 	for (int i = 0; i < wordlen; ++i)
 	{
@@ -803,7 +823,7 @@ void doPileSteal(int playerID, const char* word)
 		{
 			playerWords[playerID][playerNumWords[playerID]][i] = word[i];
 			pileBufFlags[index] = pileTileState::empty;
-		}			
+		}
 		else
 			printf("Error, char not found in pile\n");
 	}
@@ -812,6 +832,67 @@ void doPileSteal(int playerID, const char* word)
 	for (int i = 0; i < wordlen; ++i) deleteLastTypedChar(); // for server testing
 	pileFaceupCount -= wordlen;
 	sortPile();
+}
+void tryAnagramSteal(const char* str, int playerID)
+{
+	// eventually check to make sure this word hasn't already
+	// been made (prevents stealing back)
+
+	int wordlen = strlen(str);
+	for (int i = 0; i < MAX_PLAYERS; ++i)
+	{
+		if (i == playerID) // can't steal from yourself
+			continue;
+
+		for (int j = 0; j < playerNumWords[i]; ++j)
+		{
+			if (strlen(playerWords[i][j]) == wordlen)
+			{
+				if (strcmp(playerWords[i][j], str) == 0) // continue if they are the same word
+					continue;
+
+				char sortedPword[MAX_WORD_LEN + 1];
+				char sortedStr[MAX_WORD_LEN + 1];
+				memset(sortedPword, '\0', MAX_WORD_LEN + 1);
+				memset(sortedStr, '\0', MAX_WORD_LEN + 1);
+				memcpy(sortedPword, playerWords[i][j], wordlen);
+				memcpy(sortedStr, str, wordlen);
+				selectionSort(sortedPword, wordlen);
+				selectionSort(sortedStr, wordlen);
+				if (strcmp(sortedPword, sortedStr) == 0) // if can steal
+				{
+					// remove word from player
+
+					// give to playerID
+
+					if (playerNumWords[playerID] >= MAX_WORDS_PER_PLAYER)
+					{
+						printf("This player already has the maximum number of words!\n");
+						return;
+					}
+
+					// give playerID the word
+					for (int k = 0; k < wordlen; ++k)
+						playerWords[playerID][playerNumWords[playerID]][k] = str[k];
+
+					// shift words up for player who lost a word
+					for (int k = j; k < playerNumWords[i]-1; ++k) // each word
+					{
+						memset(playerWords[i][k],'\0', MAX_WORD_LEN);
+						memcpy(playerWords[i][k], playerWords[i][k+1], strlen(playerWords[i][k+1]));
+					}
+
+					playerNumWords[playerID]++;
+					playerNumWords[i]--;
+
+					for (int i = 0; i < wordlen; ++i) deleteLastTypedChar(); // clear typed letters
+					printf("player %d anagram stole a word from player %d", playerID, i);
+				}
+				return;
+			}
+		}
+	}
+	printf("No anagram steals.");
 }
 bool canPileSteal(const char* str)
 {
