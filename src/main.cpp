@@ -29,13 +29,13 @@ enum pileTileState
 	facedown,
 	faceup
 };
-char pileBuf[MAX_PILE_SIZE];
-char pileBufFlags[MAX_PILE_SIZE];
+std::vector<char> pileBuf;
+std::vector<char> pileBufFlags;
 std::vector<uint32_t> playerNumWords;
-char playerWords[MAX_PLAYERS][MAX_WORDS_PER_PLAYER][MAX_WORD_LEN+1];
+std::vector<std::vector<std::string>> playerWords;
 char numActivePlayers = 8;
 std::vector<std::string> playerNames;
-char wordsMade[MAX_WORDS_MADE_HISTORY][MAX_WORD_LEN + 1];
+std::vector<std::string> wordsMade;
 int numWordsMade = 0;
 struct server_update_clients_packet
 {
@@ -192,10 +192,10 @@ void render_player_words()
 		render_string(playerNames[i].c_str(), letter_width, pstart_pos[i] + half_letterw + half_max_words - half_player_name, letter_scale);
 		for (int j = 0; j < playerNumWords[i]; j++)
 		{
-			int pword_len = strlen(playerWords[i][j]) / 2;
+			int pword_len = strlen(&playerWords[i][j][0]) / 2;
 			v2 word_row(0, -letter_width * (j + 1));
 			v2 half_word(pword_len * letter_width, 0);
-			render_string(playerWords[i][j], letter_width, pstart_pos[i] + half_letterw + half_max_words + word_row - half_word, letter_scale);
+			render_string(&playerWords[i][j][0], letter_width, pstart_pos[i] + half_letterw + half_max_words + word_row - half_word, letter_scale);
 		}
 	}
 }
@@ -239,7 +239,7 @@ bool wordAlreadyMade(const char* word)
 {
 	for (int i = 0; i < numWordsMade; i++)
 	{
-		if (strcmp(word, wordsMade[i]) == 0 && strlen(word) == strlen(wordsMade[i]))
+		if (strcmp(word, wordsMade[i].c_str()) == 0 && strlen(word) == strlen(wordsMade[i].c_str()))
 			return true;
 	}
 	return false;
@@ -323,8 +323,8 @@ void client_update_code(float dt)
 #endif
 			server_update_clients_packet sucp;
 			memcpy(&sucp, p_data, size);
-			memcpy(pileBuf, sucp.pileBuf, MAX_PILE_SIZE);
-			memcpy(pileBufFlags, sucp.pileBufFlags, MAX_PILE_SIZE);
+			memcpy(&pileBuf[0], sucp.pileBuf, MAX_PILE_SIZE);
+			memcpy(&pileBufFlags[0], sucp.pileBufFlags, MAX_PILE_SIZE);
 			client_free_packet(client_p, p_data);
 		}
 
@@ -367,8 +367,8 @@ void server_update_code(float dt)
 		printf("Sending board to client!\n");
 #endif
 		server_update_clients_packet sucp;
-		memcpy(sucp.pileBuf, pileBuf, MAX_PILE_SIZE);
-		memcpy(sucp.pileBufFlags, pileBufFlags, MAX_PILE_SIZE);
+		memcpy(sucp.pileBuf, &pileBuf[0], MAX_PILE_SIZE);
+		memcpy(sucp.pileBufFlags, &pileBufFlags[0], MAX_PILE_SIZE);
 		server_send_to_all_clients(server, &sucp, sizeof(sucp), true);
 		send_update_pkt_timer = 0;
 	}
@@ -734,9 +734,11 @@ void init_game()
 	// init pile memory
 	for (int i = 0; i < MAX_PILE_SIZE; i++)
 	{
-		pileBuf[i] = '\0';
+		pileBuf.push_back('\0');
+		//pileBuf[i] = '\0';
 		pileSorted[i] = '\0';
-		pileBufFlags[i] = pileTileState::facedown;
+		//pileBufFlags[i] = pileTileState::facedown;
+		pileBufFlags.push_back(pileTileState::facedown);
 		pileFacedownIndices[i] = i;
 	}
 	const char pnames[MAX_PLAYERS][MAX_WORD_LEN] =
@@ -769,12 +771,14 @@ void init_game()
 	// init player words memory
 	for (int i = 0; i < MAX_PLAYERS; i++)
 	{
+		playerWords.push_back(std::vector<std::string>());
 		for (int j = 0; j < MAX_WORDS_PER_PLAYER; j++)
 		{
+			playerWords[i].push_back(std::string());
 			playerNames[i].resize(MAX_WORD_LEN,'\0');
 			for (int k = 0; k < MAX_WORD_LEN + 1; k++)
 			{
-				playerWords[i][j][k] = '\0';
+				playerWords[i][j].push_back('\0');
 				playerNames[i][k] = '\0';
 			}
 		}
@@ -786,8 +790,15 @@ void init_game()
 	}
 	// init words made memory
 	for (int i = 0; i < MAX_WORDS_MADE_HISTORY; i++)
-		for (int j = 0; j < MAX_WORD_LEN+1; j++)
-			wordsMade[i][j] = '\0';
+	{
+		wordsMade.push_back(std::string());
+		for (int j = 0; j < MAX_WORD_LEN + 1; j++)
+		{
+			wordsMade[i].push_back('\0');
+		}
+	}
+	//wordsMade[i][j] = '\0';
+
 	numWordsMade = 0;
 	// init test data memory
 	if (TEST_DATA)
@@ -911,13 +922,13 @@ void tryAnagramSteal(const char* word, int playerID)
 	{
 		for (int j = 0; j < playerNumWords[i]; ++j) // word
 		{
-			if (strlen(playerWords[i][j]) == wordlen)
+			if (strlen(&playerWords[i][j][0]) == wordlen)
 			{
 				char sortedPword[MAX_WORD_LEN + 1];
 				char sortedStr[MAX_WORD_LEN + 1];
 				memset(sortedPword, '\0', MAX_WORD_LEN + 1);
 				memset(sortedStr, '\0', MAX_WORD_LEN + 1);
-				memcpy(sortedPword, playerWords[i][j], wordlen);
+				memcpy(sortedPword, &playerWords[i][j][0], wordlen);
 				memcpy(sortedStr, word, wordlen);
 				selectionSort(sortedPword, wordlen);
 				selectionSort(sortedStr, wordlen);
@@ -938,10 +949,10 @@ void tryAnagramSteal(const char* word, int playerID)
 					// shift words up for player who lost a word
 					for (int k = j; k < playerNumWords[i]-1; ++k) // each word after current
 					{
-						memset(playerWords[i][k],'\0', MAX_WORD_LEN);
-						memcpy(playerWords[i][k], playerWords[i][k+1], MAX_WORD_LEN);
+						memset(&playerWords[i][k][0], '\0', MAX_WORD_LEN);
+						memcpy(&playerWords[i][k][0], &playerWords[i][k+1][0], MAX_WORD_LEN);
 					}
-					memset(playerWords[i][playerNumWords[i] - 1], '\0', MAX_WORD_LEN);
+					memset(&playerWords[i][playerNumWords[i] - 1][0], '\0', MAX_WORD_LEN);
 
 					playerNumWords[i]--;
 					wordWasMade(word);
