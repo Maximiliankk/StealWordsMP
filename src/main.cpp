@@ -33,7 +33,7 @@ std::vector<char> pileBuf;
 std::vector<char> pileBufFlags;
 std::vector<uint32_t> playerNumWords;
 std::vector<std::vector<std::string>> playerWords;
-char numActivePlayers = 8;
+unsigned char numActivePlayers = 8;
 std::vector<std::string> playerNames;
 std::vector<std::string> wordsMade;
 int numWordsMade = 0;
@@ -43,10 +43,10 @@ struct server_update_clients_packet
 	char pileBufFlags[MAX_PILE_SIZE];
 	//char player_words[MAX_PILE_SIZE * 2];
 };
-char pileSorted[MAX_PILE_SIZE + 1];
+std::vector<char> pileSorted;
 int pileFacedownIndices[MAX_PILE_SIZE];
 int pileFaceupCount = 0;
-char letterBuf[MAX_WORD_LEN+1] = { 0 };
+std::vector<char> letterBuf;
 char engdict_words[ENG_DICT_LINES][MAX_DICT_WORD_LEN];
 //dictionary<string_t, array<string_t>> fastDict;
 rnd_t rnd;
@@ -109,8 +109,8 @@ error_t make_test_connect_token(uint64_t unique_client_id, const char* address_a
 }
 void deleteLastTypedChar()
 {
-	if (strlen(letterBuf))
-		letterBuf[strlen(letterBuf) - 1] = '\0';
+	if (strlen(&letterBuf[0]))
+		letterBuf[strlen(&letterBuf[0]) - 1] = '\0';
 }
 void update_letterBuf()
 {
@@ -118,18 +118,18 @@ void update_letterBuf()
 	for(int i='a';i<='z';++i)
 	{
 		if (key_was_pressed(key_button_t(i))) {
-			if(strlen(letterBuf) < MAX_WORD_LEN)
+			if(strlen(&letterBuf[0]) < MAX_WORD_LEN)
 			{
 				char letter[2];
 				letter[0] = i - cap_diff;
 				letter[1] = '\0';
-				strcat(letterBuf, letter);
+				strcat(&letterBuf[0], letter);
 			}
 		}	
 	}
 	if (key_was_pressed(KEY_BACKSPACE))
 	{
-		int len = strlen(letterBuf);
+		int len = strlen(&letterBuf[0]);
 		for (int i = 0; i < len; ++i)
 			deleteLastTypedChar();
 	}
@@ -171,7 +171,7 @@ void render_player_words()
 	float smallhalf = halfw > halfh ? halfh : halfw;
 	v2 pstart_pos[8] = {
 		v2(-smallhalf, smallhalf),
-		v2(smallhalf, smallhalf),
+		v2( smallhalf, smallhalf),
 		v2(-smallhalf,-smallhalf),
 		v2( smallhalf,-smallhalf),
 
@@ -305,7 +305,7 @@ void client_update_code(float dt)
 		if (key_was_pressed(KEY_RETURN)) {
 			char data[50];
 			strcpy(data,"kp:enter:");
-			strcat(data, letterBuf);
+			strcat(data, &letterBuf[0]);
 			int size = (int)strlen(data) + 1;
 			client_send(client_p, data, size, true);
 		}
@@ -391,7 +391,7 @@ void server_update_code(float dt)
 				printf("A player is trying to make word: %s\n", word);
 				if (is_a_word(word))
 				{
-					if (!wordAlreadyMade(letterBuf))
+					if (!wordAlreadyMade(&letterBuf[0]))
 					{
 						if (canPileSteal(word))
 						{
@@ -418,25 +418,25 @@ void server_update_code(float dt)
 	// for testing on server by yourself
 	if (key_was_pressed(KEY_RETURN))
 	{
-		if (is_a_word(letterBuf))
+		if (is_a_word(&letterBuf[0]))
 		{
-			printf("%s is a word!\n", letterBuf);
-			if (!wordAlreadyMade(letterBuf))
+			printf("%s is a word!\n", &letterBuf[0]);
+			if (!wordAlreadyMade(&letterBuf[0]))
 			{
-				if (canPileSteal(letterBuf))
+				if (canPileSteal(&letterBuf[0]))
 				{
 					printf("can pile steal!\n");
-					doPileSteal(0, letterBuf);
+					doPileSteal(0, &letterBuf[0]);
 				}
 				else
 				{
-					tryAnagramSteal(letterBuf, 0);
+					tryAnagramSteal(&letterBuf[0], 0);
 					printf("cannot pile steal...\n");
 				}
 			}
 		}
 		else
-			printf("%s is not a word...\n", letterBuf);
+			printf("%s is not a word...\n", &letterBuf[0]);
 	}
 }
 void render_typing()
@@ -444,9 +444,9 @@ void render_typing()
 	update_letterBuf();
 	float letterscale = 0.7;
 	int tilewidth = letter_sprites[0].w * letterscale;
-	v2 pos(- (float)strlen(letterBuf) / 2.0 * (float)tilewidth,
+	v2 pos(- (float)strlen(&letterBuf[0]) / 2.0 * (float)tilewidth,
 		PILE_DIM * tilewidth - 170);
-	render_string(letterBuf, tilewidth, pos, letterscale);
+	render_string(&letterBuf[0], tilewidth, pos, letterscale);
 }
 void main_loop()
 {
@@ -731,13 +731,16 @@ void Shuffle(char* str)
 }
 void init_game()
 {
+	for (int i = 0; i < MAX_WORD_LEN+1; i++)
+	{
+		letterBuf.push_back('\0');
+	}
+
 	// init pile memory
 	for (int i = 0; i < MAX_PILE_SIZE; i++)
 	{
 		pileBuf.push_back('\0');
-		//pileBuf[i] = '\0';
-		pileSorted[i] = '\0';
-		//pileBufFlags[i] = pileTileState::facedown;
+		pileSorted.push_back('\0');
 		pileBufFlags.push_back(pileTileState::facedown);
 		pileFacedownIndices[i] = i;
 	}
@@ -831,10 +834,6 @@ void init_game()
 		printf("%c", pileBuf[i]);
 	}
 }
-char getPileVal(int i, int j)
-{
-	return pileBuf[i * PILE_DIM + j];
-}
 char* getSortedPile()
 {
 	return &pileSorted[MAX_PILE_SIZE - pileFaceupCount];
@@ -876,7 +875,7 @@ void sortPile()
 		else
 			pileSorted[i] = '0';
 	}
-	selectionSort(pileSorted, MAX_PILE_SIZE);
+	selectionSort(&pileSorted[0], MAX_PILE_SIZE);
 	printf("sorted pile: %s\n", getSortedPile());
 }
 int findFirstFaceupChar(char c)
