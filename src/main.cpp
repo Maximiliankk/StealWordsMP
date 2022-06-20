@@ -21,6 +21,8 @@ using namespace cute;
 #define MAX_WORDS_MADE_HISTORY 1000
 #define MAX_PILE_SIZE PILE_DIM*PILE_DIM
 #define TEST_DATA true
+#define DEBUG_PRINTS_NET false
+#define DEBUG_PRINTS_PLAYER_WORDS false
 enum pileTileState
 {
 	empty,
@@ -29,10 +31,9 @@ enum pileTileState
 };
 char pileBuf[MAX_PILE_SIZE];
 char pileBufFlags[MAX_PILE_SIZE];
-char playerNumWords[MAX_PLAYERS];
+std::vector<uint32_t> playerNumWords;
 char playerWords[MAX_PLAYERS][MAX_WORDS_PER_PLAYER][MAX_WORD_LEN+1];
 char numActivePlayers = 8;
-//char playerNames[MAX_PLAYERS][MAX_WORD_LEN + 1];
 std::vector<std::string> playerNames;
 char wordsMade[MAX_WORDS_MADE_HISTORY][MAX_WORD_LEN + 1];
 int numWordsMade = 0;
@@ -249,6 +250,24 @@ void wordWasMade(const char* word)
 	for (int i = 0; i < wordlen; i++)
 		wordsMade[numWordsMade][i] = word[i];
 	numWordsMade++;
+
+#if DEBUG_PRINTS_PLAYER_WORDS == true
+	for (int i = 0; i < MAX_PLAYERS; i++)
+	{
+		printf("............Player %d words................\n",i);
+		for (int j = 0; j < MAX_WORDS_PER_PLAYER; j++)
+		{
+			for (int k = 0; k < MAX_WORD_LEN; k++)
+			{
+				//if (playerWords[j][k] == '\0')
+					//continue;
+				printf("%c", playerWords[i][j][k]);
+			}
+			printf("\n");
+		}
+	}
+	printf("DDDDDDDDDDDDDD\n");
+#endif
 }
 void client_update_code(float dt)
 {	
@@ -264,7 +283,9 @@ void client_update_code(float dt)
 		client_update_pkt_timer += dt;
 		if (client_update_pkt_timer > 1)
 		{
+#if DEBUG_PRINTS_NET == true
 			printf("Sending empty packet to server\n");
+#endif
 			char data = 'a';
 			//client_send(client_p, (void*)&data, 1, false);
 			error_t ret = client_send(client_p, nullptr, 0, false);
@@ -297,7 +318,9 @@ void client_update_code(float dt)
 		int size;
 		while (client_pop_packet(client_p, &p_data, &size))
 		{
+#if DEBUG_PRINTS_NET == true
 			printf("Got a packet from server!\n");
+#endif
 			server_update_clients_packet sucp;
 			memcpy(&sucp, p_data, size);
 			memcpy(pileBuf, sucp.pileBuf, MAX_PILE_SIZE);
@@ -340,7 +363,9 @@ void server_update_code(float dt)
 	send_update_pkt_timer += dt;
 	if (send_update_pkt_timer > 1)
 	{
+#if DEBUG_PRINTS_NET == true
 		printf("Sending board to client!\n");
+#endif
 		server_update_clients_packet sucp;
 		memcpy(sucp.pileBuf, pileBuf, MAX_PILE_SIZE);
 		memcpy(sucp.pileBufFlags, pileBufFlags, MAX_PILE_SIZE);
@@ -355,7 +380,9 @@ void server_update_code(float dt)
 		else if (e.type == SERVER_EVENT_TYPE_PAYLOAD_PACKET) {
 			int c_idx = (int)e.u.payload_packet.client_index;
 			const char* msg = (const char*)e.u.payload_packet.data;
+#if DEBUG_PRINTS_NET == true
 			printf("Got a message from client on index %d, \"%s\"\n", c_idx, msg);
+#endif
 			const char* msg_header = "kp:enter:";
 			const int msg_header_len = strlen(msg_header);
 			if (strcmp(msg, msg_header))
@@ -467,12 +494,12 @@ void mount_content_folder()
 }
 void client_init_code()
 {
-	printf("Setting up Client");
+	printf("Setting up Client...\n");
 	client_p = client_create(0, appID);
 	
 	// Must be unique for each different player in your game.
 	uint64_t client_id = (uint64_t)rnd_next_range(rnd, 0, 9999999);
-	printf("my client ID is: %d", (int)client_id);
+	printf("my client ID is: %d\n", (int)client_id);
 
 	const char* server_address_and_port = "127.0.0.1:5001";
 	endpoint_t endpoint;
@@ -486,7 +513,7 @@ void client_init_code()
 }
 void server_init_code()
 {
-	printf("Setting up Server");
+	printf("Setting up Server...\n");
 	const char* address_and_port = "127.0.0.1:5001";
 	endpoint_t endpoint;
 	endpoint_init(&endpoint, address_and_port);
@@ -755,7 +782,7 @@ void init_game()
 		for (int k = 0; k < MAX_WORD_LEN; k++)
 			playerNames[i][k] = pnames[i][k];
 
-		playerNumWords[i] = 0;
+		playerNumWords.push_back(0);
 	}
 	// init words made memory
 	for (int i = 0; i < MAX_WORDS_MADE_HISTORY; i++)
@@ -857,7 +884,6 @@ void doPileSteal(int playerID, const char* word)
 		printf("This player already has the maximum number of words!\n");
 		return;
 	}
-	wordWasMade(word);
 
 	int wordlen = strlen(word);
 	for (int i = 0; i < wordlen; ++i)
@@ -872,6 +898,7 @@ void doPileSteal(int playerID, const char* word)
 			printf("Error, char not found in pile\n");
 	}
 	playerNumWords[playerID]++;
+	wordWasMade(word);
 	printf("\n");
 	for (int i = 0; i < wordlen; ++i) deleteLastTypedChar(); // for server testing
 	pileFaceupCount -= wordlen;
@@ -886,9 +913,6 @@ void tryAnagramSteal(const char* word, int playerID)
 		{
 			if (strlen(playerWords[i][j]) == wordlen)
 			{
-				//if (strcmp(playerWords[i][j], word) == 0) // continue if they are the same word
-					//continue;
-
 				char sortedPword[MAX_WORD_LEN + 1];
 				char sortedStr[MAX_WORD_LEN + 1];
 				memset(sortedPword, '\0', MAX_WORD_LEN + 1);
@@ -904,7 +928,6 @@ void tryAnagramSteal(const char* word, int playerID)
 						printf("This player already has the maximum number of words!\n");
 						return;
 					}
-					wordWasMade(word);
 
 					// give playerID the word
 					for (int k = 0; k < wordlen; ++k)
@@ -918,17 +941,19 @@ void tryAnagramSteal(const char* word, int playerID)
 						memset(playerWords[i][k],'\0', MAX_WORD_LEN);
 						memcpy(playerWords[i][k], playerWords[i][k+1], MAX_WORD_LEN);
 					}
+					memset(playerWords[i][playerNumWords[i] - 1], '\0', MAX_WORD_LEN);
 
 					playerNumWords[i]--;
+					wordWasMade(word);
 
 					for (int k = 0; k < wordlen; ++k) deleteLastTypedChar(); // clear typed letters
-					printf("player %d anagram stole a word from player %d", playerID, i);
+					printf("player %d anagram stole a word from player %d\n", playerID, i);
 					return;
 				}
 			}
 		}
 	}
-	printf("No anagram steals.");
+	printf("No anagram steals.\n");
 }
 //void remainingString(const char* word, const char* letters, char result[MAX_WORD_LEN])
 //{
