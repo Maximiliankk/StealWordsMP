@@ -21,6 +21,7 @@ using namespace cute;
 #define MAX_WORDS_MADE_HISTORY 1000
 #define MAX_PILE_SIZE PILE_DIM*PILE_DIM
 #define TEST_DATA true
+#define RENDERING_CODE true
 #define DEBUG_PRINTS_NET false
 #define DEBUG_PRINTS_PLAYER_WORDS false
 enum pileTileState
@@ -335,6 +336,8 @@ void client_update_code(float dt)
 }
 void server_update_code(float dt)
 {
+#if RENDERING_CODE == true
+
 	static float flip_timer = 0;
 	flip_timer += dt;
 	if (flip_timer > (pileFaceupCount+1))
@@ -356,6 +359,8 @@ void server_update_code(float dt)
 	render_pile();
 	render_player_words();
 	batch_flush(batch_p);
+#endif // SERVER_DEBUG_RENDERING == true
+
 	uint64_t unix_time = unix_timestamp();
 	server_update(server, dt, unix_time);
 
@@ -456,8 +461,9 @@ void main_loop()
 		app_update(dt);
 
 		render_typing();
-
+#if RENDERING_CODE == true
 		batch_flush(batch_p);
+#endif
 
 #ifdef CLIENT
 		client_update_code(dt);
@@ -466,7 +472,9 @@ void main_loop()
 #ifdef SERVER
 		server_update_code(dt);
 #endif
+#if RENDERING_CODE == true
 		app_present();
+#endif
 	}
 }
 void panic(error_t err)
@@ -658,6 +666,7 @@ void load_assets()
 
 	load_eng_dict();
 
+#if RENDERING_CODE == true
 	// load sprites
 	{
 	letter_sprites[0 ] = sprite_make("art/letter_a.ase");
@@ -688,6 +697,7 @@ void load_assets()
 	letter_sprites[25] = sprite_make("art/letter_z.ase");
 	letter_back        = sprite_make("art/letter_back.ase");
 	}
+#endif
 }
 bool is_a_word(const char* word)
 {
@@ -1039,14 +1049,28 @@ bool canPileSteal(const char* str)
 }
 int main(int argc, const char** argv)
 {
+#ifdef SERVER
+	uint32_t app_options = CUTE_APP_OPTIONS_HIDDEN;
+#endif
+#ifdef CLIENT
 	uint32_t app_options = CUTE_APP_OPTIONS_DEFAULT_GFX_CONTEXT | CUTE_APP_OPTIONS_WINDOW_POS_CENTERED;
+#endif
+	if (RENDERING_CODE)
+	{
+		app_options |= CUTE_APP_OPTIONS_DEFAULT_GFX_CONTEXT;
+	}
 	app_make("Steal Words Multiplayer", 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT, app_options, argv[0]);
+
+#if RENDERING_CODE == true
 	batch_p = sprite_get_batch();
 	batch_set_projection(batch_p, matrix_ortho_2d(WINDOW_WIDTH, WINDOW_HEIGHT, 0, 0));
+#endif
 	mount_content_folder();
 	rnd = rnd_seed((uint64_t)time(0));
 
+#if RENDERING_CODE == true
 	app_init_imgui();
+#endif
 	init_game();
 	load_assets();
 
