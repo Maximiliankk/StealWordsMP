@@ -22,7 +22,7 @@ using namespace cute;
 #define MAX_PILE_SIZE PILE_DIM*PILE_DIM
 #define TEST_DATA true
 #define RENDERING_CODE false
-#define DEBUG_PRINTS_NET false
+#define DEBUG_PRINTS_NET true
 #define DEBUG_PRINTS_PLAYER_WORDS false
 enum pileTileState
 {
