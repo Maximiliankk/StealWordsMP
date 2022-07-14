@@ -21,7 +21,7 @@ using namespace cute;
 #define MAX_WORDS_MADE_HISTORY 1000
 #define MAX_PILE_SIZE PILE_DIM*PILE_DIM
 #define TEST_DATA true
-#define RENDERING_CODE true
+#define RENDERING_CODE false
 #define DEBUG_PRINTS_NET false
 #define DEBUG_PRINTS_PLAYER_WORDS false
 enum pileTileState
@@ -336,8 +336,6 @@ void client_update_code(float dt)
 }
 void server_update_code(float dt)
 {
-#if RENDERING_CODE == true
-
 	static float flip_timer = 0;
 	flip_timer += dt;
 	if (flip_timer > (pileFaceupCount+1))
@@ -356,6 +354,7 @@ void server_update_code(float dt)
 		else
 			printf("\nGG! Game is done!\n");
 	}
+#if RENDERING_CODE == true
 	render_pile();
 	render_player_words();
 	batch_flush(batch_p);
@@ -1057,7 +1056,7 @@ int main(int argc, const char** argv)
 #endif
 	if (RENDERING_CODE)
 	{
-		app_options |= CUTE_APP_OPTIONS_DEFAULT_GFX_CONTEXT;
+		app_options = CUTE_APP_OPTIONS_DEFAULT_GFX_CONTEXT | CUTE_APP_OPTIONS_WINDOW_POS_CENTERED;
 	}
 	app_make("Steal Words Multiplayer", 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT, app_options, argv[0]);
 
