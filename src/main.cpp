@@ -508,7 +508,7 @@ void client_init_code()
 	uint64_t client_id = (uint64_t)rnd_next_range(rnd, 0, 9999999);
 	printf("my client ID is: %d\n", (int)client_id);
 
-	const char* server_address_and_port = "127.0.0.1:5001";
+	const char* server_address_and_port = "64.225.77.115:5001";
 	endpoint_t endpoint;
 	endpoint_init(&endpoint, server_address_and_port);
 
@@ -521,7 +521,7 @@ void client_init_code()
 void server_init_code()
 {
 	printf("Setting up Server...\n");
-	const char* address_and_port = "127.0.0.1:5001";
+	const char* address_and_port = "64.225.77.115:5001";
 	endpoint_t endpoint;
 	endpoint_init(&endpoint, address_and_port);
 
