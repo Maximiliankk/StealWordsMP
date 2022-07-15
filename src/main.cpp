@@ -21,9 +21,12 @@ using namespace cute;
 #define MAX_WORDS_MADE_HISTORY 1000
 #define MAX_PILE_SIZE PILE_DIM*PILE_DIM
 #define TEST_DATA true
-#define RENDERING_CODE false
+#define RENDERING_CODE true
 #define DEBUG_PRINTS_NET true
 #define DEBUG_PRINTS_PLAYER_WORDS false
+#define SERVER_IP "127.0.0.1"
+#define CLIENT_IP "127.0.0.1"
+#define PORT "5001"
 enum pileTileState
 {
 	empty,
@@ -508,7 +511,9 @@ void client_init_code()
 	uint64_t client_id = (uint64_t)rnd_next_range(rnd, 0, 9999999);
 	printf("my client ID is: %d\n", (int)client_id);
 
-	const char* server_address_and_port = "64.225.77.115:5001";
+	char server_address_and_port[100] = CLIENT_IP;
+	strcat(server_address_and_port, ":");
+	strcat(server_address_and_port, PORT);
 	endpoint_t endpoint;
 	endpoint_init(&endpoint, server_address_and_port);
 
@@ -521,7 +526,10 @@ void client_init_code()
 void server_init_code()
 {
 	printf("Setting up Server...\n");
-	const char* address_and_port = "64.225.77.115:5001";
+	char address_and_port[100] = SERVER_IP;
+	strcat(address_and_port, ":");
+	strcat(address_and_port, PORT);
+
 	endpoint_t endpoint;
 	endpoint_init(&endpoint, address_and_port);
 
