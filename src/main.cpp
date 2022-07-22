@@ -79,7 +79,7 @@ void sortPile();
 bool canPileSteal(const char* str);
 void doPileSteal(int playerID, const char* word);
 void tryAnagramSteal(const char* str, int playerID);
-error_t make_test_connect_token(uint64_t unique_client_id, const char* address_and_port, uint8_t* connect_token_buffer)
+cute::error_t make_test_connect_token(uint64_t unique_client_id, const char* address_and_port, uint8_t* connect_token_buffer)
 {
 	crypto_key_t client_to_server_key = crypto_generate_key();
 	crypto_key_t server_to_client_key = crypto_generate_key();
@@ -93,7 +93,7 @@ error_t make_test_connect_token(uint64_t unique_client_id, const char* address_a
 	uint8_t user_data[CUTE_CONNECT_TOKEN_USER_DATA_SIZE];
 	memset(user_data, 0, sizeof(user_data));
 
-	error_t err = generate_connect_token(
+	cute::error_t err = generate_connect_token(
 		appID,
 		current_timestamp,
 		&client_to_server_key,
@@ -291,7 +291,7 @@ void client_update_code(float dt)
 #endif
 			char data = 'a';
 			//client_send(client_p, (void*)&data, 1, false);
-			error_t ret = client_send(client_p, nullptr, 0, false);
+			cute::error_t ret = client_send(client_p, nullptr, 0, false);
 			if (ret.is_error())
 			{
 				printf("ERROR: %s\n", ret.details);
@@ -478,7 +478,7 @@ void main_loop()
 #endif
 	}
 }
-void panic(error_t err)
+void panic(cute::error_t err)
 {
 	printf("ERROR: %s\n", err.details);
 	exit(-1);
@@ -517,7 +517,7 @@ void client_init_code()
 	endpoint_init(&endpoint, server_address_and_port);
 
 	uint8_t connect_token[CUTE_CONNECT_TOKEN_SIZE];
-	error_t err = make_test_connect_token(client_id, server_address_and_port, connect_token);
+	cute::error_t err = make_test_connect_token(client_id, server_address_and_port, connect_token);
 	if (err.is_error()) panic(err);
 	err = client_connect(client_p, connect_token);
 	if (err.is_error()) panic(err);
@@ -538,7 +538,7 @@ void server_init_code()
 	memcpy(server_config.secret_key.key, g_secret_key_data, sizeof(g_secret_key_data));
 
 	server = server_create(server_config);
-	error_t err = server_start(server, address_and_port);
+	cute::error_t err = server_start(server, address_and_port);
 	if (err.is_error()) panic(err);
 }
 void load_eng_dict()
