@@ -532,13 +532,16 @@ void server_init_code()
 	endpoint_t endpoint;
 	endpoint_init(&endpoint, address_and_port);
 
+	printf("server_config_defaults()...\n");
 	server_config_t server_config = server_config_defaults();
 	server_config.application_id = appID;
 	memcpy(server_config.public_key.key, g_public_key_data, sizeof(g_public_key_data));
 	memcpy(server_config.secret_key.key, g_secret_key_data, sizeof(g_secret_key_data));
 
+	printf("server_create(server_config)...\n");
 	server = server_create(server_config);
 	cute::error_t err = server_start(server, address_and_port);
+	printf("if (err.is_error()) panic(err)...\n");
 	if (err.is_error()) panic(err);
 }
 void load_eng_dict()
