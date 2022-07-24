@@ -21,7 +21,7 @@ using namespace cute;
 #define MAX_WORDS_MADE_HISTORY 1000
 #define MAX_PILE_SIZE PILE_DIM*PILE_DIM
 #define TEST_DATA true
-#define RENDERING_CODE false
+#define RENDERING_CODE true
 #define DEBUG_PRINTS_NET true
 #define DEBUG_PRINTS_PLAYER_WORDS false
 #define SERVER_IP "64.225.77.115"
@@ -290,8 +290,8 @@ void client_update_code(float dt)
 			printf("Sending empty packet to server\n");
 #endif
 			char data = 'a';
-			//client_send(client_p, (void*)&data, 1, false);
-			cute::error_t ret = client_send(client_p, nullptr, 0, false);
+			cute::error_t ret = client_send(client_p, (void*)&data, 1, false);
+			//cute::error_t ret = client_send(client_p, nullptr, 0, false);
 			if (ret.is_error())
 			{
 				printf("ERROR: %s\n", ret.details);
