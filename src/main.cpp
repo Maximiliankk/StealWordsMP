@@ -279,6 +279,7 @@ void client_update_code(float dt)
 	uint64_t unix_time = unix_timestamp();
 
 	render_pile();
+	render_player_words();
 
 	client_update(client_p, dt, unix_time);
 
@@ -361,6 +362,7 @@ void server_update_code(float dt)
 	}
 #if RENDERING_CODE == true
 	render_pile();
+	render_player_words();
 	batch_flush(batch_p);
 #endif // SERVER_DEBUG_RENDERING == true
 
@@ -464,9 +466,8 @@ void main_loop()
 		float dt = calc_dt();
 		app_update(dt);
 
-#if RENDERING_CODE == true
 		render_typing();
-		render_player_words();
+#if RENDERING_CODE == true
 		batch_flush(batch_p);
 #endif
 
