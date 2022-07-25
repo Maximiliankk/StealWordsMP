@@ -21,10 +21,10 @@ using namespace cute;
 #define MAX_WORDS_MADE_HISTORY 1000
 #define MAX_PILE_SIZE PILE_DIM*PILE_DIM
 #define TEST_DATA true
-#define RENDERING_CODE true
+#define RENDERING_CODE false
 #define DEBUG_PRINTS_NET true
 #define DEBUG_PRINTS_PLAYER_WORDS false
-#define SERVER_IP "64.225.77.115"
+#define SERVER_IP "64.225.77.115"//"127.0.0.1"
 #define PORT "5001"
 enum pileTileState
 {
@@ -44,8 +44,10 @@ struct server_update_clients_packet
 {
 	char pileBuf[MAX_PILE_SIZE];
 	char pileBufFlags[MAX_PILE_SIZE];
-	//char player_words[MAX_PILE_SIZE * 2];
+	char player_words[MAX_PLAYERS * MAX_WORDS_PER_PLAYER * MAX_WORD_LEN];
 };
+static int whatever = sizeof(server_update_clients_packet); // debugging
+
 std::vector<char> pileSorted;
 int pileFacedownIndices[MAX_PILE_SIZE];
 int pileFaceupCount = 0;
@@ -328,6 +330,7 @@ void client_update_code(float dt)
 			memcpy(&sucp, p_data, size);
 			memcpy(&pileBuf[0], sucp.pileBuf, MAX_PILE_SIZE);
 			memcpy(&pileBufFlags[0], sucp.pileBufFlags, MAX_PILE_SIZE);
+			memcpy(sucp.player_words, &playerWords[0][0][0], MAX_WORDS_PER_PLAYER * MAX_WORD_LEN * MAX_PLAYERS);
 			client_free_packet(client_p, p_data);
 		}
 
@@ -358,7 +361,6 @@ void server_update_code(float dt)
 	}
 #if RENDERING_CODE == true
 	render_pile();
-	render_player_words();
 	batch_flush(batch_p);
 #endif // SERVER_DEBUG_RENDERING == true
 
@@ -375,6 +377,7 @@ void server_update_code(float dt)
 		server_update_clients_packet sucp;
 		memcpy(sucp.pileBuf, &pileBuf[0], MAX_PILE_SIZE);
 		memcpy(sucp.pileBufFlags, &pileBufFlags[0], MAX_PILE_SIZE);
+		memcpy(&playerWords[0][0][0], sucp.player_words, MAX_WORDS_PER_PLAYER * MAX_WORD_LEN * MAX_PLAYERS);
 		server_send_to_all_clients(server, &sucp, sizeof(sucp), true);
 		send_update_pkt_timer = 0;
 	}
@@ -461,8 +464,9 @@ void main_loop()
 		float dt = calc_dt();
 		app_update(dt);
 
-		render_typing();
 #if RENDERING_CODE == true
+		render_typing();
+		render_player_words();
 		batch_flush(batch_p);
 #endif
 
