@@ -21,7 +21,6 @@ using namespace cute;
 #define MAX_WORDS_MADE_HISTORY 1000
 #define MAX_PILE_SIZE PILE_DIM*PILE_DIM
 #define TEST_DATA true
-#define RENDERING_CODE false
 #define DEBUG_PRINTS_NET true
 #define DEBUG_PRINTS_PLAYER_WORDS false
 #define SERVER_IP "64.225.77.115"//"127.0.0.1"
@@ -81,7 +80,7 @@ void sortPile();
 bool canPileSteal(const char* str);
 void doPileSteal(int playerID, const char* word);
 void tryAnagramSteal(const char* str, int playerID);
-cute::error_t make_test_connect_token(uint64_t unique_client_id, const char* address_and_port, uint8_t* connect_token_buffer)
+cute::result_t make_test_connect_token(uint64_t unique_client_id, const char* address_and_port, uint8_t* connect_token_buffer)
 {
 	crypto_key_t client_to_server_key = crypto_generate_key();
 	crypto_key_t server_to_client_key = crypto_generate_key();
@@ -95,7 +94,7 @@ cute::error_t make_test_connect_token(uint64_t unique_client_id, const char* add
 	uint8_t user_data[CUTE_CONNECT_TOKEN_USER_DATA_SIZE];
 	memset(user_data, 0, sizeof(user_data));
 
-	cute::error_t err = generate_connect_token(
+	cute::result_t err = generate_connect_token(
 		appID,
 		current_timestamp,
 		&client_to_server_key,
@@ -175,31 +174,31 @@ void render_player_words()
 	float halfw = (float)WINDOW_WIDTH / player_data_spacing, halfh = (float)WINDOW_HEIGHT / player_data_spacing;
 	float smallhalf = halfw > halfh ? halfh : halfw;
 	v2 pstart_pos[8] = {
-		v2(-smallhalf, smallhalf),
-		v2( smallhalf, smallhalf),
-		v2(-smallhalf,-smallhalf),
-		v2( smallhalf,-smallhalf),
+		V2(-smallhalf, smallhalf),
+		V2( smallhalf, smallhalf),
+		V2(-smallhalf,-smallhalf),
+		V2( smallhalf,-smallhalf),
 
-		v2(-smallhalf, 0),
-		v2( smallhalf, 0),
-		v2( 0,         smallhalf),
-		v2( 0,        -smallhalf),
+		V2(-smallhalf, 0),
+		V2( smallhalf, 0),
+		V2( 0,         smallhalf),
+		V2( 0,        -smallhalf),
 	};
 
 	float letter_scale = 0.45;
 	int letter_width = (int)((float)letter_sprites[0].w / 2.5);
-	v2 half_letterw(-letter_width/2, letter_width / 2);
+	v2 half_letterw = V2(-letter_width/2, letter_width / 2);
 	for (int i = 0; i < numActivePlayers; i++)
 	{
 		int pname_len = strlen(playerNames[i].c_str()) / 2;
-		v2 half_max_words(0, MAX_WORDS_PER_PLAYER / 2 * letter_width);
-		v2 half_player_name(pname_len * letter_width, 0);
+		v2 half_max_words = V2(0, MAX_WORDS_PER_PLAYER / 2 * letter_width);
+		v2 half_player_name = V2(pname_len * letter_width, 0);
 		render_string(playerNames[i].c_str(), letter_width, pstart_pos[i] + half_letterw + half_max_words - half_player_name, letter_scale);
 		for (int j = 0; j < playerNumWords[i]; j++)
 		{
 			int pword_len = strlen(&playerWords[i][j][0]) / 2;
-			v2 word_row(0, -letter_width * (j + 1));
-			v2 half_word(pword_len * letter_width, 0);
+			v2 word_row = V2(0, -letter_width * (j + 1));
+			v2 half_word = V2(pword_len * letter_width, 0);
 			render_string(&playerWords[i][j][0], letter_width, pstart_pos[i] + half_letterw + half_max_words + word_row - half_word, letter_scale);
 		}
 	}
@@ -213,7 +212,7 @@ void render_pile()
 {
 	float letterscale = 0.7;
 	int tilewidth = letter_sprites[0].w * letterscale;
-	v2 pos(-PILE_DIM * tilewidth / 2,
+	v2 pos = V2(-PILE_DIM * tilewidth / 2,
 		    PILE_DIM * tilewidth / 2);
 	float xstart = pos.x;
 
@@ -225,13 +224,13 @@ void render_pile()
 			if (pileBufFlags[i * PILE_DIM + j] == pileTileState::faceup)
 			{
 				int letter_index = pileBuf[i * PILE_DIM + j] - 'A';
-				letter_sprites[letter_index].scale = v2(letterscale, letterscale);
+				letter_sprites[letter_index].scale = V2(letterscale, letterscale);
 				letter_sprites[letter_index].transform.p = pos;
 				letter_sprites[letter_index].draw(batch_p);
 			}
 			else if (pileBufFlags[i * PILE_DIM + j] == pileTileState::facedown)
 			{
-				letter_back.scale = v2(letterscale, letterscale);
+				letter_back.scale = V2(letterscale, letterscale);
 				letter_back.transform.p = pos;
 				letter_back.draw(batch_p);
 			}
@@ -283,7 +282,7 @@ void client_update_code(float dt)
 
 	client_update(client_p, dt, unix_time);
 
-	if (client_state_get(client_p) == CLIENT_STATE_CONNECTED) {
+	if (client_state_get(client_p) == CF_CLIENT_STATE_CONNECTED) {
 		
 		static float client_update_pkt_timer = 0;
 		client_update_pkt_timer += dt;
@@ -293,9 +292,9 @@ void client_update_code(float dt)
 			printf("Sending empty packet to server\n");
 #endif
 			char data = 'a';
-			cute::error_t ret = client_send(client_p, (void*)&data, 1, false);
-			//cute::error_t ret = client_send(client_p, nullptr, 0, false);
-			if (ret.is_error())
+			cute::result_t ret = client_send(client_p, (void*)&data, 1, false);
+			//cute::result_t ret = client_send(client_p, nullptr, 0, false);
+			if (is_error(ret))
 			{
 				printf("ERROR: %s\n", ret.details);
 			}
@@ -360,7 +359,7 @@ void server_update_code(float dt)
 		else
 			printf("\nGG! Game is done!\n");
 	}
-#if RENDERING_CODE == true
+#if CLIENT
 	render_pile();
 	render_player_words();
 	batch_flush(batch_p);
@@ -385,10 +384,10 @@ void server_update_code(float dt)
 	}
 	server_event_t e;
 	while (server_pop_event(server, &e)) {
-		if (e.type == SERVER_EVENT_TYPE_NEW_CONNECTION) {
+		if (e.type == CF_SERVER_EVENT_TYPE_NEW_CONNECTION) {
 			printf("New connection from id %d, on index %d.\n", (int)e.u.new_connection.client_id, e.u.new_connection.client_index);
 		}
-		else if (e.type == SERVER_EVENT_TYPE_PAYLOAD_PACKET) {
+		else if (e.type == CF_SERVER_EVENT_TYPE_PAYLOAD_PACKET) {
 			int c_idx = (int)e.u.payload_packet.client_index;
 			const char* msg = (const char*)e.u.payload_packet.data;
 #if DEBUG_PRINTS_NET == true
@@ -421,7 +420,7 @@ void server_update_code(float dt)
 			}
 			server_free_packet(server, e.u.payload_packet.client_index, e.u.payload_packet.data);
 		}
-		else if (e.type == SERVER_EVENT_TYPE_DISCONNECTED) {
+		else if (e.type == CF_SERVER_EVENT_TYPE_DISCONNECTED) {
 			printf("Client disconnected on index %d.\n", e.u.disconnected.client_index);
 		}
 	}
@@ -455,7 +454,7 @@ void render_typing()
 	update_letterBuf();
 	float letterscale = 0.7;
 	int tilewidth = letter_sprites[0].w * letterscale;
-	v2 pos(- (float)strlen(&letterBuf[0]) / 2.0 * (float)tilewidth,
+	v2 pos = V2(- (float)strlen(&letterBuf[0]) / 2.0 * (float)tilewidth,
 		PILE_DIM * tilewidth - 170);
 	render_string(&letterBuf[0], tilewidth, pos, letterscale);
 }
@@ -467,7 +466,7 @@ void main_loop()
 		app_update(dt);
 
 		render_typing();
-#if RENDERING_CODE == true
+#if CLIENT
 		batch_flush(batch_p);
 #endif
 
@@ -478,12 +477,12 @@ void main_loop()
 #ifdef SERVER
 		server_update_code(dt);
 #endif
-#if RENDERING_CODE == true
+#if CLIENT
 		app_present();
 #endif
 	}
 }
-void panic(cute::error_t err)
+void panic(cute::result_t err)
 {
 	printf("ERROR: %s\n", err.details);
 	exit(-1);
@@ -509,7 +508,7 @@ void mount_content_folder()
 void client_init_code()
 {
 	printf("Setting up Client...\n");
-	client_p = client_create(0, appID);
+	client_p = make_client(0, appID);
 	
 	// Must be unique for each different player in your game.
 	uint64_t client_id = (uint64_t)rnd_next_range(rnd, 0, 9999999);
@@ -522,10 +521,10 @@ void client_init_code()
 	endpoint_init(&endpoint, server_address_and_port);
 
 	uint8_t connect_token[CUTE_CONNECT_TOKEN_SIZE];
-	cute::error_t err = make_test_connect_token(client_id, server_address_and_port, connect_token);
-	if (err.is_error()) panic(err);
+	cute::result_t err = make_test_connect_token(client_id, server_address_and_port, connect_token);
+	if (is_error(err)) panic(err);
 	err = client_connect(client_p, connect_token);
-	if (err.is_error()) panic(err);
+	if (is_error(err)) panic(err);
 }
 void server_init_code()
 {
@@ -544,10 +543,10 @@ void server_init_code()
 	memcpy(server_config.secret_key.key, g_secret_key_data, sizeof(g_secret_key_data));
 
 	printf("server_create(server_config)...\n");
-	server = server_create(server_config);
-	cute::error_t err = server_start(server, address_and_port);
-	printf("if (err.is_error()) panic(err)...\n");
-	if (err.is_error()) panic(err);
+	server = make_server(server_config);
+	cute::result_t err = server_start(server, address_and_port);
+	printf("if (is_error(err)) panic(err)...\n");
+	if (is_error(err)) panic(err);
 }
 void load_eng_dict()
 {
@@ -680,36 +679,36 @@ void load_assets()
 
 	load_eng_dict();
 
-#if RENDERING_CODE == true
+#if CLIENT
 	// load sprites
 	{
-	letter_sprites[0 ] = sprite_make("art/letter_a.ase");
-	letter_sprites[1 ] = sprite_make("art/letter_b.ase");
-	letter_sprites[2 ] = sprite_make("art/letter_c.ase");
-	letter_sprites[3 ] = sprite_make("art/letter_d.ase");
-	letter_sprites[4 ] = sprite_make("art/letter_e.ase");
-	letter_sprites[5 ] = sprite_make("art/letter_f.ase");
-	letter_sprites[6 ] = sprite_make("art/letter_g.ase");
-	letter_sprites[7 ] = sprite_make("art/letter_h.ase");
-	letter_sprites[8 ] = sprite_make("art/letter_i.ase");
-	letter_sprites[9 ] = sprite_make("art/letter_j.ase");
-	letter_sprites[10] = sprite_make("art/letter_k.ase");
-	letter_sprites[11] = sprite_make("art/letter_l.ase");
-	letter_sprites[12] = sprite_make("art/letter_m.ase");
-	letter_sprites[13] = sprite_make("art/letter_n.ase");
-	letter_sprites[14] = sprite_make("art/letter_o.ase");
-	letter_sprites[15] = sprite_make("art/letter_p.ase");
-	letter_sprites[16] = sprite_make("art/letter_q.ase");
-	letter_sprites[17] = sprite_make("art/letter_r.ase");
-	letter_sprites[18] = sprite_make("art/letter_s.ase");
-	letter_sprites[19] = sprite_make("art/letter_t.ase");
-	letter_sprites[20] = sprite_make("art/letter_u.ase");
-	letter_sprites[21] = sprite_make("art/letter_v.ase");
-	letter_sprites[22] = sprite_make("art/letter_w.ase");
-	letter_sprites[23] = sprite_make("art/letter_x.ase");
-	letter_sprites[24] = sprite_make("art/letter_y.ase");
-	letter_sprites[25] = sprite_make("art/letter_z.ase");
-	letter_back        = sprite_make("art/letter_back.ase");
+	letter_sprites[0 ] = make_sprite("art/letter_a.ase");
+	letter_sprites[1 ] = make_sprite("art/letter_b.ase");
+	letter_sprites[2 ] = make_sprite("art/letter_c.ase");
+	letter_sprites[3 ] = make_sprite("art/letter_d.ase");
+	letter_sprites[4 ] = make_sprite("art/letter_e.ase");
+	letter_sprites[5 ] = make_sprite("art/letter_f.ase");
+	letter_sprites[6 ] = make_sprite("art/letter_g.ase");
+	letter_sprites[7 ] = make_sprite("art/letter_h.ase");
+	letter_sprites[8 ] = make_sprite("art/letter_i.ase");
+	letter_sprites[9 ] = make_sprite("art/letter_j.ase");
+	letter_sprites[10] = make_sprite("art/letter_k.ase");
+	letter_sprites[11] = make_sprite("art/letter_l.ase");
+	letter_sprites[12] = make_sprite("art/letter_m.ase");
+	letter_sprites[13] = make_sprite("art/letter_n.ase");
+	letter_sprites[14] = make_sprite("art/letter_o.ase");
+	letter_sprites[15] = make_sprite("art/letter_p.ase");
+	letter_sprites[16] = make_sprite("art/letter_q.ase");
+	letter_sprites[17] = make_sprite("art/letter_r.ase");
+	letter_sprites[18] = make_sprite("art/letter_s.ase");
+	letter_sprites[19] = make_sprite("art/letter_t.ase");
+	letter_sprites[20] = make_sprite("art/letter_u.ase");
+	letter_sprites[21] = make_sprite("art/letter_v.ase");
+	letter_sprites[22] = make_sprite("art/letter_w.ase");
+	letter_sprites[23] = make_sprite("art/letter_x.ase");
+	letter_sprites[24] = make_sprite("art/letter_y.ase");
+	letter_sprites[25] = make_sprite("art/letter_z.ase");
+	letter_back        = make_sprite("art/letter_back.ase");
 	}
 #endif
 }
@@ -1064,25 +1063,25 @@ bool canPileSteal(const char* str)
 int main(int argc, const char** argv)
 {
 #ifdef SERVER
-	uint32_t app_options = CUTE_APP_OPTIONS_HIDDEN;
+	uint32_t app_options = APP_OPTIONS_HIDDEN;
 #endif
 #ifdef CLIENT
-	uint32_t app_options = CUTE_APP_OPTIONS_DEFAULT_GFX_CONTEXT | CUTE_APP_OPTIONS_WINDOW_POS_CENTERED;
+	uint32_t app_options = APP_OPTIONS_DEFAULT_GFX_CONTEXT | APP_OPTIONS_WINDOW_POS_CENTERED;
 #endif
-	if (RENDERING_CODE)
+	/*if (CLIENT)
 	{
 		app_options = CUTE_APP_OPTIONS_DEFAULT_GFX_CONTEXT | CUTE_APP_OPTIONS_WINDOW_POS_CENTERED;
-	}
-	app_make("Steal Words Multiplayer", 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT, app_options, argv[0]);
+	}*/
+	make_app("Steal Words Multiplayer", 0, 0, WINDOW_WIDTH, WINDOW_HEIGHT, app_options, argv[0]);
 
-#if RENDERING_CODE == true
+#if CLIENT
 	batch_p = sprite_get_batch();
 	batch_set_projection(batch_p, matrix_ortho_2d(WINDOW_WIDTH, WINDOW_HEIGHT, 0, 0));
 #endif
 	mount_content_folder();
 	rnd = rnd_seed((uint64_t)time(0));
 
-#if RENDERING_CODE == true
+#if CLIENT
 	app_init_imgui();
 #endif
 	init_game();
@@ -1098,7 +1097,7 @@ int main(int argc, const char** argv)
 
 	main_loop();
 
-	app_destroy();
+	destroy_app();
 
 	return 0;
 }
