@@ -23,7 +23,7 @@ using namespace cute;
 #define TEST_DATA true
 #define DEBUG_PRINTS_NET true
 #define DEBUG_PRINTS_PLAYER_WORDS false
-#define SERVER_IP "64.225.77.115"//"127.0.0.1"
+#define SERVER_IP "127.0.0.1"//"64.225.77.115"//"127.0.0.1"
 #define PORT "5001"
 enum pileTileState
 {
@@ -31,6 +31,12 @@ enum pileTileState
 	facedown,
 	faceup
 };
+enum player_connection_state
+{
+	not_connected,
+	connected
+};
+std::vector<int> connected_players;
 std::vector<char> pileBuf;
 std::vector<char> pileBufFlags;
 std::vector<uint32_t> playerNumWords;
@@ -43,7 +49,7 @@ struct server_update_clients_packet
 {
 	char pileBuf[MAX_PILE_SIZE];
 	char pileBufFlags[MAX_PILE_SIZE];
-	char player_words[MAX_PLAYERS * MAX_WORDS_PER_PLAYER * MAX_WORD_LEN];
+	//char player_words[MAX_PLAYERS * MAX_WORDS_PER_PLAYER * MAX_WORD_LEN];
 };
 static int whatever = sizeof(server_update_clients_packet); // debugging
 
@@ -308,6 +314,7 @@ void client_update_code(float dt)
 		}
 
 		if (key_was_pressed(KEY_RETURN)) {
+			printf("Enter was pressed!!!!!!!!!!!!!!!!!!!!!\n");
 			char data[50];
 			strcpy(data,"kp:enter:");
 			strcat(data, &letterBuf[0]);
@@ -315,6 +322,7 @@ void client_update_code(float dt)
 			client_send(client_p, data, size, true);
 		}
 		if (key_was_pressed(KEY_ESCAPE)) {
+			printf("Escape was pressed!!!!!!!!!!!!!!!!!!!!!\n");
 			client_disconnect(client_p);
 			app_stop_running();
 		}
@@ -330,7 +338,7 @@ void client_update_code(float dt)
 			memcpy(&sucp, p_data, size);
 			memcpy(&pileBuf[0], sucp.pileBuf, MAX_PILE_SIZE);
 			memcpy(&pileBufFlags[0], sucp.pileBufFlags, MAX_PILE_SIZE);
-			memcpy(sucp.player_words, &playerWords[0][0][0], MAX_WORDS_PER_PLAYER * MAX_WORD_LEN * MAX_PLAYERS);
+			//memcpy(sucp.player_words, &playerWords[0][0][0], MAX_WORDS_PER_PLAYER * MAX_WORD_LEN * MAX_PLAYERS);
 			client_free_packet(client_p, p_data);
 		}
 
@@ -378,16 +386,24 @@ void server_update_code(float dt)
 		server_update_clients_packet sucp;
 		memcpy(sucp.pileBuf, &pileBuf[0], MAX_PILE_SIZE);
 		memcpy(sucp.pileBufFlags, &pileBufFlags[0], MAX_PILE_SIZE);
-		memcpy(&playerWords[0][0][0], sucp.player_words, MAX_WORDS_PER_PLAYER * MAX_WORD_LEN * MAX_PLAYERS);
-		server_send_to_all_clients(server, &sucp, sizeof(sucp), true);
+		//memcpy(&playerWords[0][0][0], sucp.player_words, MAX_WORDS_PER_PLAYER * MAX_WORD_LEN * MAX_PLAYERS);
+		for (int i = 0; i < MAX_PLAYERS; i++)
+		{
+			if (connected_players[i] == player_connection_state::connected)
+			{
+				server_send(server, &sucp, sizeof(sucp), i, true);
+			}
+		}
 		send_update_pkt_timer = 0;
 	}
 	server_event_t e;
 	while (server_pop_event(server, &e)) {
 		if (e.type == CF_SERVER_EVENT_TYPE_NEW_CONNECTION) {
 			printf("New connection from id %d, on index %d.\n", (int)e.u.new_connection.client_id, e.u.new_connection.client_index);
+			connected_players[e.u.new_connection.client_index] = player_connection_state::connected;
 		}
-		else if (e.type == CF_SERVER_EVENT_TYPE_PAYLOAD_PACKET) {
+		else if (e.type == CF_SERVER_EVENT_TYPE_PAYLOAD_PACKET)
+		{
 			int c_idx = (int)e.u.payload_packet.client_index;
 			const char* msg = (const char*)e.u.payload_packet.data;
 #if DEBUG_PRINTS_NET == true
@@ -422,6 +438,7 @@ void server_update_code(float dt)
 		}
 		else if (e.type == CF_SERVER_EVENT_TYPE_DISCONNECTED) {
 			printf("Client disconnected on index %d.\n", e.u.disconnected.client_index);
+			connected_players[e.u.disconnected.client_index] = player_connection_state::not_connected;
 		}
 	}
 
@@ -497,13 +514,13 @@ uint64_t unix_timestamp()
 void mount_content_folder()
 {
 	char buf[1024];
-	const char* base = file_system_get_base_dir();
+	const char* base = fs_get_base_dir();
 	path_pop(base, buf, NULL);
 #ifdef _MSC_VER
 	path_pop(buf, buf, NULL); // Pop out of Release/Debug folder when using MSVC.
 #endif
 	strcat(buf, "/assets");
-	file_system_mount(buf, "");
+	fs_mount(buf, "");
 }
 void client_init_code()
 {
@@ -528,6 +545,8 @@ void client_init_code()
 }
 void server_init_code()
 {
+	connected_players.resize(MAX_PLAYERS, player_connection_state::not_connected);
+
 	printf("Setting up Server...\n");
 	char address_and_port[100] = SERVER_IP;
 	strcat(address_and_port, ":");
@@ -554,7 +573,7 @@ void load_eng_dict()
 	char filepath[100] = "wordlists/engdict.txt";
 
 	size_t filesize = 0;
-	file_system_read_entire_file_to_memory_and_nul_terminate(
+	fs_read_entire_file_to_memory_and_nul_terminate(
 		filepath,
 		(void**)&filedata,
 		&filesize
@@ -590,10 +609,10 @@ void load_eng_dict()
 		}
 		cur++; // skip \r
 	}
-
-	printf("\n%s", &engdict_words[ENG_DICT_LINES - 3][0]);
+	printf("\nLoaded english dictionary. Last word is: %s\n", &engdict_words[ENG_DICT_LINES - 3][0]);
+	/*printf("\n%s", &engdict_words[ENG_DICT_LINES - 3][0]);
 	printf("\n%s", &engdict_words[ENG_DICT_LINES - 2][0]);
-	printf("\n%s", &engdict_words[ENG_DICT_LINES - 1][0]);
+	printf("\n%s", &engdict_words[ENG_DICT_LINES - 1][0]);*/
 }
 void load_sorted_word_list(uint32_t n)
 {
@@ -849,13 +868,14 @@ void init_game()
 	//W - 2, X - 1, Y - 2, Z - 1
 	char letter_distr[100] = "AAAAAAAAABBCCDDDDEEEEEEEEEEEEFFGGGHHIIIIIIIIIJKLLLLMMNNNNNNNOOOOOOOOPPQRRRRRRSSSSTTTTTTUUUUVVWWXYYZ";
 	Shuffle(letter_distr);
-	printf("\nDistribution: ");
+	printf("\ninit_game() Distribution is: ");
 	int len = strlen(letter_distr);
 	for (int i = 0; i < len; i++)
 	{
 		pileBuf[i] = letter_distr[i];
 		printf("%c", pileBuf[i]);
 	}
+	printf("\n");
 }
 char* getSortedPile()
 {
@@ -899,7 +919,13 @@ void sortPile()
 			pileSorted[i] = '0';
 	}
 	selectionSort(&pileSorted[0], MAX_PILE_SIZE);
-	printf("sorted pile: %s\n", getSortedPile());
+	for (int i = 0; i < MAX_PILE_SIZE; ++i)
+	{
+		if(pileSorted[i] >= 'A' && pileSorted[i] <= 'Z')
+			printf("%c",pileSorted[i]);
+	}
+	printf("\n");
+	//printf("sorted pile: %s\n", getSortedPile());
 }
 int findFirstFaceupChar(char c)
 {
