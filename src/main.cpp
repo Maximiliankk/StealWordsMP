@@ -15,16 +15,17 @@ using namespace cute;
 #define MAX_PLAYERS 8
 #define MAX_WORDS_PER_PLAYER 10
 #define MIN_WORD_LEN 4
-#define MAX_WORD_LEN 15
+#define MAX_WORD_LEN 16
 #define MAX_DICT_WORD_LEN 20
 #define PILE_DIM 10
 #define MAX_WORDS_MADE_HISTORY 1000
 #define MAX_PILE_SIZE PILE_DIM*PILE_DIM
 #define TEST_DATA true
 #define DEBUG_PRINTS_NET true
-#define DEBUG_PRINTS_PLAYER_WORDS false
+#define DEBUG_PRINTS_PLAYER_WORDS true
 #define SERVER_IP "127.0.0.1"//"64.225.77.115"//"127.0.0.1"
 #define PORT "5001"
+#define PLAYERWORDSSIZE (MAX_PLAYERS * MAX_WORDS_PER_PLAYER * MAX_WORD_LEN)
 enum pileTileState
 {
 	empty,
@@ -40,7 +41,23 @@ std::vector<int> connected_players;
 std::vector<char> pileBuf;
 std::vector<char> pileBufFlags;
 std::vector<uint32_t> playerNumWords;
-std::vector<std::vector<std::string>> playerWords;
+std::vector<char> playerWords; // size = MAX_PLAYERS * MAX_WORDS_PER_PLAYER * MAX_WORD_LEN
+int get_pword_idx(int player_index, int word_index)
+{
+	return player_index* (MAX_WORDS_PER_PLAYER * MAX_WORD_LEN) + word_index * MAX_WORD_LEN;
+}
+char& get_pword(int player_index, int word_index, int char_index)
+{
+	int total = MAX_PLAYERS * MAX_WORDS_PER_PLAYER * MAX_WORD_LEN;
+	int val = player_index * (MAX_WORDS_PER_PLAYER * MAX_WORD_LEN) + word_index * MAX_WORD_LEN;
+	if (val + char_index >= PLAYERWORDSSIZE)
+	{
+		int problem = 1;
+	}
+	return playerWords[get_pword_idx(player_index, word_index) + char_index];
+}
+//std::vector<std::vector<std::string>> playerWords;
+//char playerWords[MAX_PLAYERS * MAX_WORDS_PER_PLAYER * MAX_WORD_LEN];
 unsigned char numActivePlayers = 8;
 std::vector<std::string> playerNames;
 std::vector<std::string> wordsMade;
@@ -49,7 +66,7 @@ struct server_update_clients_packet
 {
 	char pileBuf[MAX_PILE_SIZE];
 	char pileBufFlags[MAX_PILE_SIZE];
-	//char player_words[MAX_PLAYERS * MAX_WORDS_PER_PLAYER * MAX_WORD_LEN];
+	char player_words[MAX_WORDS_PER_PLAYER * MAX_WORD_LEN];
 };
 static int whatever = sizeof(server_update_clients_packet); // debugging
 
@@ -202,10 +219,10 @@ void render_player_words()
 		render_string(playerNames[i].c_str(), letter_width, pstart_pos[i] + half_letterw + half_max_words - half_player_name, letter_scale);
 		for (int j = 0; j < playerNumWords[i]; j++)
 		{
-			int pword_len = strlen(&playerWords[i][j][0]) / 2;
+			int pword_len = strlen(&get_pword(i,j,0)) / 2;
 			v2 word_row = V2(0, -letter_width * (j + 1));
 			v2 half_word = V2(pword_len * letter_width, 0);
-			render_string(&playerWords[i][j][0], letter_width, pstart_pos[i] + half_letterw + half_max_words + word_row - half_word, letter_scale);
+			render_string(&get_pword(i, j, 0), letter_width, pstart_pos[i] + half_letterw + half_max_words + word_row - half_word, letter_scale);
 		}
 	}
 }
@@ -271,7 +288,7 @@ void wordWasMade(const char* word)
 			{
 				//if (playerWords[j][k] == '\0')
 					//continue;
-				printf("%c", playerWords[i][j][k]);
+				printf("%c", get_pword(i, j, k));
 			}
 			printf("\n");
 		}
@@ -338,7 +355,7 @@ void client_update_code(float dt)
 			memcpy(&sucp, p_data, size);
 			memcpy(&pileBuf[0], sucp.pileBuf, MAX_PILE_SIZE);
 			memcpy(&pileBufFlags[0], sucp.pileBufFlags, MAX_PILE_SIZE);
-			//memcpy(sucp.player_words, &playerWords[0][0][0], MAX_WORDS_PER_PLAYER * MAX_WORD_LEN * MAX_PLAYERS);
+			memcpy(&playerWords[0], sucp.player_words, PLAYERWORDSSIZE / MAX_PLAYERS);
 			client_free_packet(client_p, p_data);
 		}
 
@@ -386,7 +403,7 @@ void server_update_code(float dt)
 		server_update_clients_packet sucp;
 		memcpy(sucp.pileBuf, &pileBuf[0], MAX_PILE_SIZE);
 		memcpy(sucp.pileBufFlags, &pileBufFlags[0], MAX_PILE_SIZE);
-		//memcpy(&playerWords[0][0][0], sucp.player_words, MAX_WORDS_PER_PLAYER * MAX_WORD_LEN * MAX_PLAYERS);
+		memcpy(sucp.player_words, &playerWords[0], PLAYERWORDSSIZE / MAX_PLAYERS);
 		for (int i = 0; i < MAX_PLAYERS; i++)
 		{
 			if (connected_players[i] == player_connection_state::connected)
@@ -407,14 +424,14 @@ void server_update_code(float dt)
 			int c_idx = (int)e.u.payload_packet.client_index;
 			const char* msg = (const char*)e.u.payload_packet.data;
 #if DEBUG_PRINTS_NET == true
-			printf("Got a message from client on index %d, \"%s\"\n", c_idx, msg);
+			//printf("Got a message from client on index %d, \"%s\"\n", c_idx, msg);
 #endif
 			const char* msg_header = "kp:enter:";
 			const int msg_header_len = strlen(msg_header);
 			if (strcmp(msg, msg_header))
 			{
 				const char* word = msg + msg_header_len; // skip the header
-				printf("A player is trying to make word: %s\n", word);
+				//printf("A player is trying to make word: %s\n", word);
 				if (is_a_word(word))
 				{
 					if (!wordAlreadyMade(&letterBuf[0]))
@@ -813,18 +830,20 @@ void init_game()
 	};
 	
 	playerNames.resize(MAX_PLAYERS);
+	playerWords.resize(MAX_PLAYERS * MAX_WORDS_PER_PLAYER * MAX_WORD_LEN, '\0');
 	// init player words memory
 	for (int i = 0; i < MAX_PLAYERS; i++)
 	{
-		playerWords.push_back(std::vector<std::string>());
+		//playerWords.push_back(std::vector<std::string>());
 		for (int j = 0; j < MAX_WORDS_PER_PLAYER; j++)
 		{
-			playerWords[i].push_back(std::string());
+			//playerWords[i].push_back(std::string());
 			playerNames[i].resize(MAX_WORD_LEN,'\0');
-			for (int k = 0; k < MAX_WORD_LEN + 1; k++)
+			for (int k = 0; k < MAX_WORD_LEN; k++)
 			{
-				playerWords[i][j].push_back('\0');
+				//playerWords[i][j].push_back('\0');
 				playerNames[i][k] = '\0';
+				get_pword(i, j, k) = '\0';
 			}
 		}
 
@@ -854,7 +873,7 @@ void init_game()
 			for (int j = 0; j < min(MAX_WORDS_PER_PLAYER, numtestwords); j++)
 			{
 				for (int k = 0; k < MAX_WORD_LEN; k++)
-					playerWords[i][j][k] = testwords[j][k];
+					get_pword(i, j, k) = testwords[j][k];
 
 				playerNumWords[i]++;
 				wordWasMade(testwords[j]);
@@ -950,7 +969,8 @@ void doPileSteal(int playerID, const char* word)
 		int index = findFirstFaceupChar(word[i]);
 		if (index >= 0)
 		{
-			playerWords[playerID][playerNumWords[playerID]][i] = word[i];
+			get_pword(playerID, playerNumWords[playerID], i) = word[i];
+			//playerWords[playerID][playerNumWords[playerID]][i] = word[i];
 			pileBufFlags[index] = pileTileState::empty;
 		}
 		else
@@ -970,13 +990,13 @@ void tryAnagramSteal(const char* word, int playerID)
 	{
 		for (int j = 0; j < playerNumWords[i]; ++j) // word
 		{
-			if (strlen(&playerWords[i][j][0]) == wordlen)
+			if (strlen(&get_pword(i, j, 0)) == wordlen)
 			{
 				char sortedPword[MAX_WORD_LEN + 1];
 				char sortedStr[MAX_WORD_LEN + 1];
 				memset(sortedPword, '\0', MAX_WORD_LEN + 1);
 				memset(sortedStr, '\0', MAX_WORD_LEN + 1);
-				memcpy(sortedPword, &playerWords[i][j][0], wordlen);
+				memcpy(sortedPword, &get_pword(i, j, 0), wordlen);
 				memcpy(sortedStr, word, wordlen);
 				selectionSort(sortedPword, wordlen);
 				selectionSort(sortedStr, wordlen);
@@ -990,17 +1010,18 @@ void tryAnagramSteal(const char* word, int playerID)
 
 					// give playerID the word
 					for (int k = 0; k < wordlen; ++k)
-						playerWords[playerID][playerNumWords[playerID]][k] = word[k];
+						get_pword(playerID, playerNumWords[playerID], k) = word[k];
+						//playerWords[playerID][playerNumWords[playerID]][k] = word[k];
 
 					playerNumWords[playerID]++;
 
 					// shift words up for player who lost a word
 					for (int k = j; k < playerNumWords[i]-1; ++k) // each word after current
 					{
-						memset(&playerWords[i][k][0], '\0', MAX_WORD_LEN);
-						memcpy(&playerWords[i][k][0], &playerWords[i][k+1][0], MAX_WORD_LEN);
+						memset(&get_pword(i,k,0), '\0', MAX_WORD_LEN);
+						memcpy(&get_pword(i, k, 0), &get_pword(i, k+1, 0), MAX_WORD_LEN);
 					}
-					memset(&playerWords[i][playerNumWords[i] - 1][0], '\0', MAX_WORD_LEN);
+					memset(&get_pword(i,playerNumWords[i] - 1,0), '\0', MAX_WORD_LEN);
 
 					playerNumWords[i]--;
 					wordWasMade(word);
