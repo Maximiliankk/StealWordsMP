@@ -40,7 +40,7 @@ enum player_connection_state
 std::vector<int> connected_players;
 std::vector<char> pileBuf;
 std::vector<char> pileBufFlags;
-std::vector<uint32_t> playerNumWords;
+std::vector<char> playerNumWords;
 std::vector<char> playerWords; // size = MAX_PLAYERS * MAX_WORDS_PER_PLAYER * MAX_WORD_LEN
 int get_pword_idx(int player_index, int word_index)
 {
@@ -66,7 +66,8 @@ struct server_update_clients_packet
 {
 	char pileBuf[MAX_PILE_SIZE];
 	char pileBufFlags[MAX_PILE_SIZE];
-	char player_words[MAX_WORDS_PER_PLAYER * MAX_WORD_LEN];
+	char player_words[PLAYERWORDSSIZE];
+	char playerNumWords[MAX_PLAYERS];
 };
 static int whatever = sizeof(server_update_clients_packet); // debugging
 
@@ -216,12 +217,14 @@ void render_player_words()
 		int pname_len = strlen(playerNames[i].c_str()) / 2;
 		v2 half_max_words = V2(0, MAX_WORDS_PER_PLAYER / 2 * letter_width);
 		v2 half_player_name = V2(pname_len * letter_width, 0);
+		std::string tempstr = playerNames[i].c_str();
 		render_string(playerNames[i].c_str(), letter_width, pstart_pos[i] + half_letterw + half_max_words - half_player_name, letter_scale);
-		for (int j = 0; j < playerNumWords[i]; j++)
+		for (int j = 0; j < (int)playerNumWords[i]; j++)
 		{
 			int pword_len = strlen(&get_pword(i,j,0)) / 2;
 			v2 word_row = V2(0, -letter_width * (j + 1));
 			v2 half_word = V2(pword_len * letter_width, 0);
+			std::string tempstr2 = &get_pword(i, j, 0);
 			render_string(&get_pword(i, j, 0), letter_width, pstart_pos[i] + half_letterw + half_max_words + word_row - half_word, letter_scale);
 		}
 	}
@@ -355,7 +358,8 @@ void client_update_code(float dt)
 			memcpy(&sucp, p_data, size);
 			memcpy(&pileBuf[0], sucp.pileBuf, MAX_PILE_SIZE);
 			memcpy(&pileBufFlags[0], sucp.pileBufFlags, MAX_PILE_SIZE);
-			memcpy(&playerWords[0], sucp.player_words, PLAYERWORDSSIZE / MAX_PLAYERS);
+			memcpy(&playerWords[0], sucp.player_words, PLAYERWORDSSIZE);
+			memcpy(&playerNumWords[0], sucp.playerNumWords, MAX_PLAYERS);
 			client_free_packet(client_p, p_data);
 		}
 
@@ -403,7 +407,8 @@ void server_update_code(float dt)
 		server_update_clients_packet sucp;
 		memcpy(sucp.pileBuf, &pileBuf[0], MAX_PILE_SIZE);
 		memcpy(sucp.pileBufFlags, &pileBufFlags[0], MAX_PILE_SIZE);
-		memcpy(sucp.player_words, &playerWords[0], PLAYERWORDSSIZE / MAX_PLAYERS);
+		memcpy(sucp.player_words, &playerWords[0], PLAYERWORDSSIZE);
+		memcpy(sucp.playerNumWords, &playerNumWords[0], MAX_PLAYERS);
 		for (int i = 0; i < MAX_PLAYERS; i++)
 		{
 			if (connected_players[i] == player_connection_state::connected)
@@ -969,7 +974,7 @@ void doPileSteal(int playerID, const char* word)
 		int index = findFirstFaceupChar(word[i]);
 		if (index >= 0)
 		{
-			get_pword(playerID, playerNumWords[playerID], i) = word[i];
+			get_pword(playerID, (int)playerNumWords[playerID], i) = word[i];
 			//playerWords[playerID][playerNumWords[playerID]][i] = word[i];
 			pileBufFlags[index] = pileTileState::empty;
 		}
@@ -988,7 +993,7 @@ void tryAnagramSteal(const char* word, int playerID)
 	int wordlen = strlen(word);
 	for (int i = 0; i < MAX_PLAYERS; ++i) // player
 	{
-		for (int j = 0; j < playerNumWords[i]; ++j) // word
+		for (int j = 0; j < (int)playerNumWords[i]; ++j) // word
 		{
 			if (strlen(&get_pword(i, j, 0)) == wordlen)
 			{
@@ -1010,13 +1015,13 @@ void tryAnagramSteal(const char* word, int playerID)
 
 					// give playerID the word
 					for (int k = 0; k < wordlen; ++k)
-						get_pword(playerID, playerNumWords[playerID], k) = word[k];
+						get_pword(playerID, (int)playerNumWords[playerID], k) = word[k];
 						//playerWords[playerID][playerNumWords[playerID]][k] = word[k];
 
 					playerNumWords[playerID]++;
 
 					// shift words up for player who lost a word
-					for (int k = j; k < playerNumWords[i]-1; ++k) // each word after current
+					for (int k = j; k < (int)playerNumWords[i]-1; ++k) // each word after current
 					{
 						memset(&get_pword(i,k,0), '\0', MAX_WORD_LEN);
 						memcpy(&get_pword(i, k, 0), &get_pword(i, k+1, 0), MAX_WORD_LEN);
