@@ -140,6 +140,11 @@ void deleteLastTypedChar()
 	if (strlen(&letterBuf[0]))
 		letterBuf[strlen(&letterBuf[0]) - 1] = '\0';
 }
+void clearLetterBuf()
+{
+	int len = strlen(&letterBuf[0]);
+	for (int i = 0; i < len; ++i) deleteLastTypedChar();
+}
 void update_letterBuf()
 {
 	int cap_diff = 'a' - 'A';
@@ -157,9 +162,14 @@ void update_letterBuf()
 	}
 	if (key_was_pressed(KEY_BACKSPACE))
 	{
-		int len = strlen(&letterBuf[0]);
-		for (int i = 0; i < len; ++i)
+		if (key_is_down(KEY_LCTRL) && key_was_pressed(KEY_BACKSPACE))
+		{
+			clearLetterBuf();
+		}
+		else
+		{
 			deleteLastTypedChar();
+		}
 	}
 }
 sprite_t* get_letter_sprite(char c)
@@ -340,6 +350,7 @@ void client_update_code(float dt)
 			strcat(data, &letterBuf[0]);
 			int size = (int)strlen(data) + 1;
 			client_send(client_p, data, size, true);
+			clearLetterBuf();
 		}
 		if (key_was_pressed(KEY_ESCAPE)) {
 			printf("Escape was pressed!!!!!!!!!!!!!!!!!!!!!\n");
@@ -984,7 +995,7 @@ void doPileSteal(int playerID, const char* word)
 	playerNumWords[playerID]++;
 	wordWasMade(word);
 	printf("\n");
-	for (int i = 0; i < wordlen; ++i) deleteLastTypedChar(); // for server testing
+	clearLetterBuf();
 	pileFaceupCount -= wordlen;
 	sortPile();
 }
