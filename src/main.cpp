@@ -23,7 +23,7 @@ using namespace cute;
 #define TEST_DATA true
 #define DEBUG_PRINTS_NET true
 #define DEBUG_PRINTS_PLAYER_WORDS true
-#define SERVER_IP "127.0.0.1"//"64.225.77.115"//"127.0.0.1"
+#define SERVER_IP "64.225.77.115"//"127.0.0.1"
 #define PORT "5001"
 #define PLAYERWORDSSIZE (MAX_PLAYERS * MAX_WORDS_PER_PLAYER * MAX_WORD_LEN)
 enum pileTileState
