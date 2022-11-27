@@ -2,14 +2,17 @@
 next version goal:
 -playable
   -sync player names
-  -force players to name themselves when starting the app
+  -stop same word steals
+  -winscreen/celebration for winner
 
 future features:
+-able to restart games without restarting server every time
+-test on Mac OSX
 -basic networked lobby
   -list of games currently running (can join/leave any at any time)
   -set your name
     -if player has the same name dont let them into the game (or just let people have same name)
--create a new game/table?
+-allow changing WINDOW_WIDTH and WINDOW_HEIGHT
 
     
 cleanup:
@@ -18,4 +21,7 @@ cleanup:
 
 tasks:
 -set Rendering code macro with Sever macro
--allow changing WINDOW_WIDTH and WINDOW_HEIGHT
+
+
+done:
+  -force players to name themselves when starting the app
