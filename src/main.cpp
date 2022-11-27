@@ -56,8 +56,8 @@ char& get_pword(int player_index, int word_index, int char_index)
 	}
 	return playerWords[get_pword_idx(player_index, word_index) + char_index];
 }
-//std::vector<std::vector<std::string>> playerWords;
-//char playerWords[MAX_PLAYERS * MAX_WORDS_PER_PLAYER * MAX_WORD_LEN];
+bool hasNamedThemselves = false;
+std::string localName = "unnamed";
 unsigned char numActivePlayers = 8;
 std::vector<std::string> playerNames;
 std::vector<std::string> wordsMade;
@@ -162,7 +162,7 @@ void update_letterBuf()
 	}
 	if (key_was_pressed(KEY_BACKSPACE))
 	{
-		if (key_is_down(KEY_LCTRL) && key_was_pressed(KEY_BACKSPACE))
+		if (key_is_down(KEY_LCTRL))
 		{
 			clearLetterBuf();
 		}
@@ -313,70 +313,87 @@ void client_update_code(float dt)
 {	
 	uint64_t unix_time = unix_timestamp();
 
-	render_pile();
-	render_player_words();
-
-	client_update(client_p, dt, unix_time);
-
-	if (client_state_get(client_p) == CF_CLIENT_STATE_CONNECTED) {
-		
-		static float client_update_pkt_timer = 0;
-		client_update_pkt_timer += dt;
-		if (client_update_pkt_timer > 1)
-		{
-#if DEBUG_PRINTS_NET == true
-			printf("Sending empty packet to server\n");
-#endif
-			char data = 'a';
-			cute::result_t ret = client_send(client_p, (void*)&data, 1, false);
-			//cute::result_t ret = client_send(client_p, nullptr, 0, false);
-			if (is_error(ret))
-			{
-				printf("ERROR: %s\n", ret.details);
-			}
-			client_update_pkt_timer = 0;
-		}
-
-		static bool notify = false;
-		if (!notify) {
-			notify = true;
-			printf("Connected! Press ESC to gracefully disconnect.\n");
-		}
+	if (!hasNamedThemselves)
+	{
+		float letterscale = 0.7;
+		int tilewidth = letter_sprites[0].w * letterscale;
+		v2 pos = V2((float)tilewidth, PILE_DIM * tilewidth - 140);
+		render_string("ENTERNAME", tilewidth, pos, letterscale);
 
 		if (key_was_pressed(KEY_RETURN)) {
-			printf("Enter was pressed!!!!!!!!!!!!!!!!!!!!!\n");
-			char data[50];
-			strcpy(data,"kp:enter:");
-			strcat(data, &letterBuf[0]);
-			int size = (int)strlen(data) + 1;
-			client_send(client_p, data, size, true);
-			clearLetterBuf();
+			//playerNames[] = ;
+			localName = &letterBuf[0];
+			hasNamedThemselves = true;
 		}
-		if (key_was_pressed(KEY_ESCAPE)) {
-			printf("Escape was pressed!!!!!!!!!!!!!!!!!!!!!\n");
-			client_disconnect(client_p);
-			app_stop_running();
-		}
+	}
+	else
+	{
+		render_pile();
+		render_player_words();
 
-		void* p_data;
-		int size;
-		while (client_pop_packet(client_p, &p_data, &size))
-		{
+		client_update(client_p, dt, unix_time);
+
+		if (client_state_get(client_p) == CF_CLIENT_STATE_CONNECTED) {
+
+			static float client_update_pkt_timer = 0;
+			client_update_pkt_timer += dt;
+			if (client_update_pkt_timer > 1)
+			{
 #if DEBUG_PRINTS_NET == true
-			printf("Got a packet from server!\n");
+				printf("Sending empty packet to server\n");
 #endif
-			server_update_clients_packet sucp;
-			memcpy(&sucp, p_data, size);
-			memcpy(&pileBuf[0], sucp.pileBuf, MAX_PILE_SIZE);
-			memcpy(&pileBufFlags[0], sucp.pileBufFlags, MAX_PILE_SIZE);
-			memcpy(&playerWords[0], sucp.player_words, PLAYERWORDSSIZE);
-			memcpy(&playerNumWords[0], sucp.playerNumWords, MAX_PLAYERS);
-			client_free_packet(client_p, p_data);
-		}
+				char data = 'a';
+				cute::result_t ret = client_send(client_p, (void*)&data, 1, false);
+				//cute::result_t ret = client_send(client_p, nullptr, 0, false);
+				if (is_error(ret))
+				{
+					printf("ERROR: %s\n", ret.details);
+				}
+				client_update_pkt_timer = 0;
+			}
 
-	} else if (client_state_get(client_p) < 0) {
-		printf("Client encountered an error: %s.\n", client_state_string(client_state_get(client_p)));
-		exit(-1);
+			static bool notify = false;
+			if (!notify) {
+				notify = true;
+				printf("Connected! Press ESC to gracefully disconnect.\n");
+			}
+
+			if (key_was_pressed(KEY_RETURN)) {
+				printf("Enter was pressed!!!!!!!!!!!!!!!!!!!!!\n");
+				char data[50];
+				strcpy(data, "kp:enter:");
+				strcat(data, &letterBuf[0]);
+				int size = (int)strlen(data) + 1;
+				client_send(client_p, data, size, true);
+				clearLetterBuf();
+			}
+			if (key_was_pressed(KEY_ESCAPE)) {
+				printf("Escape was pressed!!!!!!!!!!!!!!!!!!!!!\n");
+				client_disconnect(client_p);
+				app_stop_running();
+			}
+
+			void* p_data;
+			int size;
+			while (client_pop_packet(client_p, &p_data, &size))
+			{
+#if DEBUG_PRINTS_NET == true
+				printf("Got a packet from server!\n");
+#endif
+				server_update_clients_packet sucp;
+				memcpy(&sucp, p_data, size);
+				memcpy(&pileBuf[0], sucp.pileBuf, MAX_PILE_SIZE);
+				memcpy(&pileBufFlags[0], sucp.pileBufFlags, MAX_PILE_SIZE);
+				memcpy(&playerWords[0], sucp.player_words, PLAYERWORDSSIZE);
+				memcpy(&playerNumWords[0], sucp.playerNumWords, MAX_PLAYERS);
+				client_free_packet(client_p, p_data);
+			}
+
+		}
+		else if (client_state_get(client_p) < 0) {
+			printf("Client encountered an error: %s.\n", client_state_string(client_state_get(client_p)));
+			exit(-1);
+		}
 	}
 }
 void server_update_code(float dt)
