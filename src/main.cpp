@@ -324,6 +324,7 @@ void client_update_code(float dt)
 			//playerNames[] = ;
 			localName = &letterBuf[0];
 			hasNamedThemselves = true;
+			client_init_code();
 		}
 	}
 	else
@@ -1169,10 +1170,6 @@ int main(int argc, const char** argv)
 
 #ifdef SERVER
 	server_init_code();
-#endif
-
-#ifdef CLIENT
-	client_init_code();
 #endif
 
 	main_loop();
